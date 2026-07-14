@@ -1,0 +1,26 @@
+﻿[
+    {
+        "id_usulan":  "",
+        "tanggal_usulan":  "",
+        "no_nota_dinas":  "",
+        "no_seri_indoor":  "",
+        "kondisi_terakhir":  "",
+        "tanggal_masuk_gudang":  "",
+        "Lokasi_Gudang":  "Gudang BMN Cipete",
+        "sinkronisasi":  "FALSE",
+        "status_sistem":  "⚠️ DATA BELUM LENGKAP",
+        "Keterangan tabel":  ""
+    },
+    {
+        "id_usulan":  "",
+        "tanggal_usulan":  "",
+        "no_nota_dinas":  "",
+        "no_seri_indoor":  "",
+        "kondisi_terakhir":  "",
+        "tanggal_masuk_gudang":  "",
+        "Lokasi_Gudang":  "Gudang BMN Cipete",
+        "sinkronisasi":  "FALSE",
+        "status_sistem":  "⚠️ DATA BELUM LENGKAP",
+        "Keterangan tabel":  null
+    }
+]

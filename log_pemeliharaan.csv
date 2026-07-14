@@ -1,0 +1,11 @@
+id_laporan,tanggal_laporan,nama_pelapor,no_seri_indoor,keluhan_awal,tanggal_servis_cek,nama_vendor_teknisi,jenis_tindakan,rekomendasi_perbaikan,tanggal_selesai,suku_cadang_diganti_perbaikan,status_akhir,lokasi_otomatis,keterangan,Keterangan tabel
+PM-26-0001,27/01/2026,Dimas,E022914,Mati Total,02/10/2026,Pak Sepriwan,Perbaikan lainnya,Ganti unit,,,Pengajuan baru,Wisma 1 Office,Ditolak PPK,
+⚠️ SERI INDOOR TIDAK TERDAFTAR,27/01/2026,Dimas,E000274,Tidak Dingin,02/10/2026,Pak Sepriwan,Ganti Sparepart,Ganti modul outdoor & pipa,,,Pengajuan baru,Nomor Seri Tidak Ditemukan,Ditolak PPK,
+PM-26-0003,27/01/2026,Nanang,E022920,Mati Outdoor,02/10/2026,Pak Sepriwan,Ganti Sparepart,Ganti modul outdoor,,,Pengajuan baru,Wisma 1 (1210),Ditolak PPK,
+PM-26-0004,27/01/2026,Nanang,E023134,Mati Indoor,02/10/2026,Mba Agis / Pak Juhdi,Ganti Sparepart,Perbaikan PCB outdoor,01/04/2026,Perbaikan PCB outdoor,Selesai,Wisma 1 (1212),,
+PM-26-0005,27/01/2026,,37007109783,Overheat,02/10/2026,Pak Sepriwan,Ganti Sparepart,Ganti Outdoor / Ganti 1 set,,,Pengajuan baru,Ruang Tim Rumah Tangga,Ditolak PPK,
+PM-26-0006,27/01/2026,,9804224I000167,Mati Indoor,03/10/2026,Pak Sepriwan,Ganti Sparepart,Ganti 1 set Receiver sensor,,,Disetujui PPK,Ruang Kasubtim Akpel,Menunggu tindakan Vendor,
+PM-26-0007,27/01/2026,,9804224I000174,Mati Indoor,03/10/2026,Pak Sepriwan,Ganti Sparepart,"Ganti Motor fan indoor, Kapasitor fan, Kapasitor kompresor, kontaktor",,,Disetujui PPK,R. Kasubtim SDM,Menunggu tindakan Vendor,
+PM-26-0008,11/01/2026,,E000489,Bocor Air,03/09/2026,Pak Sepriwan,,,,,,Aula AC No.5,,
+PM-26-0009,11/01/2026,,E000486,Bocor Air,03/09/2026,Pak Sepriwan,,,,,,Aula AC No.4,,
+,,,,Mati Total,,,Perbaikan lainnya,,,,,,,

@@ -1,0 +1,50 @@
+﻿[
+    {
+        "id_mutasi":  "",
+        "tanggal_mutasi":  "",
+        "no_seri_indoor":  "",
+        "lokasi_asal":  "",
+        "lokasi_tujuan":  "Kamar Utama",
+        "alasan_mutasi":  "perintah pimpinan",
+        "nama_pelaksana":  "andi",
+        "sinkronisasi":  "FALSE",
+        "status_mutasi":  "⚠️ DATA BELUM LENGKAP",
+        "Keterangan tabel":  ""
+    },
+    {
+        "id_mutasi":  "",
+        "tanggal_mutasi":  "",
+        "no_seri_indoor":  "",
+        "lokasi_asal":  "",
+        "lokasi_tujuan":  "Ruang Driver",
+        "alasan_mutasi":  "iseng aja",
+        "nama_pelaksana":  "Cecep",
+        "sinkronisasi":  "FALSE",
+        "status_mutasi":  "⚠️ DATA BELUM LENGKAP",
+        "Keterangan tabel":  ""
+    },
+    {
+        "id_mutasi":  "",
+        "tanggal_mutasi":  "",
+        "no_seri_indoor":  "",
+        "lokasi_asal":  "",
+        "lokasi_tujuan":  "",
+        "alasan_mutasi":  "",
+        "nama_pelaksana":  "",
+        "sinkronisasi":  "FALSE",
+        "status_mutasi":  "⚠️ DATA BELUM LENGKAP",
+        "Keterangan tabel":  ""
+    },
+    {
+        "id_mutasi":  "",
+        "tanggal_mutasi":  "",
+        "no_seri_indoor":  "",
+        "lokasi_asal":  "",
+        "lokasi_tujuan":  "",
+        "alasan_mutasi":  "",
+        "nama_pelaksana":  "",
+        "sinkronisasi":  "FALSE",
+        "status_mutasi":  "⚠️ DATA BELUM LENGKAP",
+        "Keterangan tabel":  null
+    }
+]

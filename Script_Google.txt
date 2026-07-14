@@ -1,0 +1,410 @@
+// =========================================================================
+// KODE LENGKAP GOOGLE APPS SCRIPT - SI-AC PAUD DASMEN
+// Gabungan: Robot Otomatis + API Web App (Formula-Safe)
+// =========================================================================
+
+// =========================================================================
+// ROBOT 1: ALARM PENGINGAT 3 BULAN
+// =========================================================================
+function onOpen() {
+  var ui = SpreadsheetApp.getUi();
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheetLog = ss.getSheetByName("log_usul_hapus_2026");
+  
+  if (!sheetLog) return;
+  var lastRow = sheetLog.getLastRow();
+  if (lastRow < 2) return;
+
+  var data = sheetLog.getRange(2, 1, lastRow - 1, 9).getValues();
+  var jumlahJatuhTempo = 0;
+  var daftarSeri = [];
+  var hariIni = new Date();
+
+  for (var i = 0; i < data.length; i++) {
+    var tglUsulan = data[i][1]; 
+    var noSeri = String(data[i][3]).trim(); 
+    var statusSistem = String(data[i][8]).trim(); 
+
+    if (tglUsulan instanceof Date && statusSistem === "✅ MASUK GUDANG") {
+      var selisihWaktu = hariIni.getTime() - tglUsulan.getTime();
+      var selisihHari = Math.floor(selisihWaktu / (1000 * 3600 * 24));
+      if (selisihHari >= 90) {
+        jumlahJatuhTempo++;
+        daftarSeri.push(noSeri);
+      }
+    }
+  }
+
+  if (jumlahJatuhTempo > 0) {
+    ui.alert(
+      "🚨 PERINGATAN PENGHAPUSAN ASET BMN 🚨",
+      "Tuan Putri, terdapat " + jumlahJatuhTempo + " unit AC yang usulan penghapusannya sudah melewati batas waktu 3 bulan namun belum dihapus permanen.\n\nNomor Seri: " + daftarSeri.join(", "),
+      ui.ButtonSet.OK
+    );
+  }
+}
+
+// =========================================================================
+// ROBOT 2: PEKERJA UTAMA (VERSI RADAR DIAGNOSTIK + USUL HAPUS)
+// =========================================================================
+function onEdit(e) {
+  if (!e) return;
+  var sheet = e.range.getSheet();
+  var row = e.range.getRow();
+  var col = e.range.getColumn();
+  var namaSheet = sheet.getName().toLowerCase();
+
+  // --------------------------------------------------------------------------
+  // MODUL 1: KHUSUS UNTUK TAB MUTASI
+  // --------------------------------------------------------------------------
+  if (namaSheet.indexOf("mutasi") !== -1) {
+    
+    // 1.A: TARIK DATA ASAL OTOMATIS
+    if (col === 3) {
+      try {
+        var noSeriMutasi = sheet.getRange(row, 3).getDisplayValue().trim();
+        if (noSeriMutasi === "" || noSeriMutasi.indexOf("⚠️") !== -1) {
+          sheet.getRange(row, 4).setValue(""); sheet.getRange(row, 5).setValue(""); return;
+        }
+        var masterSheet = e.source.getSheetByName("master_database_2026");
+        if (!masterSheet) return;
+        var lastRowMasterM = masterSheet.getLastRow();
+        if (lastRowMasterM < 2) return;
+        var dataMasterM = masterSheet.getRange(2, 1, lastRowMasterM - 1, 15).getDisplayValues(); 
+        var gedungDitemukan = "Tidak Ditemukan", lokasiDitemukan = "Tidak Ditemukan";
+        for (var i = 0; i < dataMasterM.length; i++) {
+          if (dataMasterM[i][4].trim() === noSeriMutasi) { 
+            gedungDitemukan = dataMasterM[i][13].trim(); lokasiDitemukan = dataMasterM[i][14].trim(); break;
+          }
+        }
+        sheet.getRange(row, 4).setValue(gedungDitemukan); sheet.getRange(row, 5).setValue(lokasiDitemukan); 
+      } catch (err) {}
+    }
+    
+    // 1.B: EKSEKUSI SINKRONISASI DENGAN RADAR
+    if (col === 10) {
+      var nilaiCentang = e.range.getValue();
+      if (nilaiCentang === true || nilaiCentang === "TRUE" || nilaiCentang === "true") {
+        
+        var selStatus = sheet.getRange(row, 11);
+
+        try {
+          // --- RADAR 1 ---
+          selStatus.setValue("Lacak 1: Membaca input...");
+          SpreadsheetApp.flush(); 
+
+          var noSeriMutasiUbah = sheet.getRange(row, 3).getDisplayValue().trim(); 
+          var gedungBaru = sheet.getRange(row, 6).getDisplayValue().trim(); 
+          var lokasiBaru = sheet.getRange(row, 7).getDisplayValue().trim(); 
+          
+          if (noSeriMutasiUbah === "" || gedungBaru === "" || lokasiBaru === "") {
+            selStatus.setValue("⚠️ KOSONG: Seri/Gedung/Lokasi"); 
+            e.range.setValue(false); 
+            return;
+          }
+
+          // --- RADAR 2 ---
+          selStatus.setValue("Lacak 2: Membuka Master...");
+          SpreadsheetApp.flush(); 
+
+          var masterSheet2 = e.source.getSheetByName("master_database_2026");
+          if (!masterSheet2) {
+            selStatus.setValue("❌ CRASH: Tab Master salah nama!"); 
+            e.range.setValue(false); 
+            return;
+          }
+
+          // --- RADAR 3 ---
+          selStatus.setValue("Lacak 3: Mencari Seri...");
+          SpreadsheetApp.flush(); 
+
+          var lastRowMasterM2 = masterSheet2.getLastRow();
+          var dataNoSeriMasterM = masterSheet2.getRange(2, 5, lastRowMasterM2 - 1, 1).getDisplayValues(); 
+          var barisTarget = -1;
+          
+          for (var j = 0; j < dataNoSeriMasterM.length; j++) {
+            if (dataNoSeriMasterM[j][0].trim() === noSeriMutasiUbah) {
+              barisTarget = j + 2;
+              break;
+            }
+          }
+          
+          if (barisTarget !== -1) {
+            // --- RADAR 4 ---
+            selStatus.setValue("Lacak 4: Menulis ke Master...");
+            SpreadsheetApp.flush(); 
+
+            masterSheet2.getRange(barisTarget, 14).setValue(gedungBaru); 
+            masterSheet2.getRange(barisTarget, 15).setValue(lokasiBaru); 
+            
+            selStatus.setValue("✅ BERHASIL DIUBAH"); 
+          } else {
+            selStatus.setValue("❌ SERI TIDAK ADA DI MASTER"); 
+          }
+          
+          e.range.setValue(false); // Matikan centang setelah selesai
+
+        } catch (error) {
+          selStatus.setValue("❌ CRASH: " + error.message);
+          e.range.setValue(false); 
+        }
+      }
+    }
+  }
+  
+  // --------------------------------------------------------------------------
+  // MODUL 2: KHUSUS UNTUK TAB USUL HAPUS 
+  // --------------------------------------------------------------------------
+  else if (namaSheet.indexOf("hapus") !== -1) {
+    
+    // 2.A: JIKA MENCENTANG KOTAK DI KOLOM H (KOLOM KE-8)
+    if (col === 8) {
+      var nilaiSelHapus = e.range.getValue();
+      if (nilaiSelHapus === true || nilaiSelHapus === "TRUE" || nilaiSelHapus === "true") {
+        var noSeriHapus = sheet.getRange(row, 4).getDisplayValue().trim(); // Kolom D
+        var kondisiBaru = sheet.getRange(row, 5).getDisplayValue().trim(); // Kolom E
+        var lokasiGudang = sheet.getRange(row, 7).getDisplayValue().trim(); // Kolom G
+        
+        if (noSeriHapus === "" || lokasiGudang === "") {
+          sheet.getRange(row, 9).setValue("⚠️ DATA BELUM LENGKAP"); 
+          e.range.setValue(false); 
+          return;
+        }
+        
+        var masterSheetH = e.source.getSheetByName("master_database_2026");
+        if (!masterSheetH) {
+          sheet.getRange(row, 9).setValue("❌ CRASH: Tab Master tidak ditemukan"); 
+          e.range.setValue(false); 
+          return;
+        }
+
+        var lastRowMasterH = masterSheetH.getLastRow();
+        var dataNoSeriMasterH = masterSheetH.getRange(2, 5, lastRowMasterH - 1, 1).getDisplayValues(); 
+        
+        var ditemukanH = false;
+        for (var k = 0; k < dataNoSeriMasterH.length; k++) {
+          if (dataNoSeriMasterH[k][0].trim() === noSeriHapus) {
+            // Ubah Lokasi di Master (Kolom O/ke-15) menjadi Lokasi Gudang
+            masterSheetH.getRange(k + 2, 15).setValue(lokasiGudang); 
+            // Ubah Kondisi di Master (Kolom M/ke-13) menjadi Kondisi Terakhir
+            masterSheetH.getRange(k + 2, 13).setValue(kondisiBaru); 
+            ditemukanH = true;
+            break;
+          }
+        }
+        
+        if (ditemukanH) {
+          sheet.getRange(row, 9).setValue("✅ MASUK GUDANG"); 
+        } else {
+          sheet.getRange(row, 9).setValue("❌ SERI TIDAK ADA DI MASTER"); 
+        }
+        // Hilangkan centang di Kolom H (Kolom ke-8)
+        e.range.setValue(false); 
+      }
+    }
+  }
+}
+
+// =========================================================================
+// KONFIGURASI NAMA SHEET
+// =========================================================================
+var SHEET_NAMES = {
+  acData: "master_database_2026",                
+  logPemeliharaan: "log_pemeliharaan_2026",
+  logMutasi: "log_mutasi_2026",
+  logUsulHapus: "log_usul_hapus_2026",
+  users: "users_2026"
+};
+
+// Fungsi untuk membuka Spreadsheet berdasarkan ID yang dikirim Aplikasi
+function getSpreadsheet(id) {
+  if (id) {
+    try {
+      return SpreadsheetApp.openById(id);
+    } catch(e) {
+      return null;
+    }
+  }
+  return SpreadsheetApp.getActiveSpreadsheet();
+}
+
+// =========================================================================
+// doGet: Membaca data dari Spreadsheet → dikirim ke Aplikasi Web
+// =========================================================================
+function doGet(e) {
+  var ss = getSpreadsheet(e.parameter.id);
+  if (!ss) {
+    return ContentService.createTextOutput(JSON.stringify({error: "Spreadsheet tidak ditemukan atau Anda tidak memiliki akses ke sana."}))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+  
+  var result = {};
+  
+  Object.keys(SHEET_NAMES).forEach(function(jsonKey) {
+    var sheetName = SHEET_NAMES[jsonKey];
+    var sheet = ss.getSheetByName(sheetName);
+    
+    if (!sheet) {
+      result[jsonKey] = [];
+      return;
+    }
+    
+    var lastCol = sheet.getLastColumn();
+    var lastRow = sheet.getLastRow();
+
+    if (lastRow < 2 || lastCol < 1) {
+      result[jsonKey] = [];
+      return;
+    }
+    
+    // Baca header baris pertama
+    var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+    
+    // getValues() mengembalikan NILAI hasil formula, bukan rumus mentahnya
+    var dataValues = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+
+    var rows = [];
+    for (var i = 0; i < dataValues.length; i++) {
+      // Lewati baris yang benar-benar kosong
+      var isEmpty = dataValues[i].every(function(cell) { return cell === '' || cell === null; });
+      if (isEmpty) continue;
+      
+      var obj = {};
+      for (var j = 0; j < headers.length; j++) {
+        if (headers[j] !== '') {
+          obj[headers[j]] = dataValues[i][j];
+        }
+      }
+      rows.push(obj);
+    }
+    result[jsonKey] = rows;
+  });
+  
+  return ContentService.createTextOutput(JSON.stringify(result))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+// =========================================================================
+// doPost: Menerima data dari Aplikasi Web → disimpan ke Spreadsheet
+//
+// ⭐ FORMULA-SAFE: Hanya menulis ke kolom yang dikelola aplikasi.
+//    Kolom formula/rumus di spreadsheet TIDAK AKAN DISENTUH.
+// =========================================================================
+function doPost(e) {
+  try {
+    var bodyStr = "";
+    if (e.parameter && e.parameter.data) {
+      bodyStr = e.parameter.data;
+    } else if (e.postData && e.postData.contents) {
+      bodyStr = e.postData.contents;
+    }
+    
+    if (!bodyStr) {
+      return ContentService.createTextOutput(JSON.stringify({error: "Tidak ada data yang diterima"}))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    var body = JSON.parse(bodyStr);
+    var ss = getSpreadsheet(body.targetSpreadsheetId);
+    
+    if (!ss) {
+      return ContentService.createTextOutput(JSON.stringify({error: "Spreadsheet tidak ditemukan atau Anda tidak memiliki akses ke sana."}))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    var payload = body.payload;
+    if (!payload) {
+      return ContentService.createTextOutput(JSON.stringify({error: "Payload kosong"}))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    Object.keys(SHEET_NAMES).forEach(function(jsonKey) {
+      if (!payload[jsonKey] || payload[jsonKey].length === 0) return;
+      
+      var sheetName = SHEET_NAMES[jsonKey];
+      var sheet = ss.getSheetByName(sheetName);
+      
+      // Jika sheet belum ada, buat otomatis
+      if (!sheet) {
+        sheet = ss.insertSheet(sheetName);
+        var newHeaders = Object.keys(payload[jsonKey][0]);
+        sheet.getRange(1, 1, 1, newHeaders.length).setValues([newHeaders]);
+      }
+      
+      var jsonArray = payload[jsonKey];
+      var appKeys = Object.keys(jsonArray[0]); // Kolom yang dikelola aplikasi
+      
+      var totalCols = sheet.getLastColumn();
+      var lastRow = sheet.getLastRow();
+      if (totalCols < 1) return;
+      
+      // Baca SEMUA header dari spreadsheet
+      var allHeaders = sheet.getRange(1, 1, 1, totalCols).getValues()[0];
+      
+      // ⭐ KUNCI KEAMANAN ARRAYFORMULA:
+      // Baca formula di baris pertama data (Baris ke-2). 
+      // Jika ada ARRAYFORMULA, ia pasti berada di baris ini.
+      var row2Formulas = [];
+      if (lastRow > 1) {
+        row2Formulas = sheet.getRange(2, 1, 1, totalCols).getFormulas()[0];
+      }
+      
+      var appColMap = [];
+      allHeaders.forEach(function(headerName, idx) {
+        var h = String(headerName || '').trim();
+        if (h !== '' && appKeys.indexOf(h) !== -1) {
+          
+          var formula = (row2Formulas.length > idx) ? row2Formulas[idx] : "";
+          
+          // Jika baris ke-2 pada kolom ini berisi formula (seperti =ARRAYFORMULA),
+          // JANGAN masukkan ke appColMap. Kita ABAIKAN kolom ini saat menyimpan
+          // agar formula bisa meluas (spill) ke bawah tanpa terhalang teks kosong.
+          if (formula && formula.toString().trim().charAt(0) === '=') {
+            // Skip kolom ini
+          } else {
+            appColMap.push({ col: idx + 1, key: h }); // col adalah 1-indexed
+          }
+        }
+      });
+      
+      if (appColMap.length === 0) return;
+      
+      // Hapus isi HANYA pada kolom yang tidak ada formulanya
+      if (lastRow > 1) {
+        appColMap.forEach(function(cm) {
+          sheet.getRange(2, cm.col, lastRow - 1, 1).clearContent();
+        });
+      }
+      
+      // Tulis data baru HANYA ke kolom yang aman
+      appColMap.forEach(function(cm) {
+        var colValues = jsonArray.map(function(item) {
+          var val = item[cm.key];
+          
+          // Konversi string tanggal kembali menjadi objek Date agar Google Sheets mengenalinya sebagai Tanggal asli
+          if (typeof val === 'string' && val.trim() !== '') {
+            if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(val)) {
+              val = new Date(val);
+            } else if (/^\d{4}-\d{2}-\d{2}$/.test(val)) {
+              var parts = val.split('-');
+              val = new Date(parts[0], parts[1] - 1, parts[2]);
+            }
+          }
+          
+          return [val !== undefined && val !== null ? val : ''];
+        });
+        
+        var targetRange = sheet.getRange(2, cm.col, colValues.length, 1);
+        targetRange.clearDataValidations(); // Mencegah script error jika ada aturan "Tolak Input"
+        targetRange.setValues(colValues);
+      });
+    });
+    
+    return ContentService.createTextOutput(JSON.stringify({success: true}))
+      .setMimeType(ContentService.MimeType.JSON);
+      
+  } catch (error) {
+    return ContentService.createTextOutput(JSON.stringify({error: error.toString()}))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}

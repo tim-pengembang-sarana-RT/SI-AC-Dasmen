@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistem Informasi AC (SI-AC) PAUD Dasmen</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+  <link rel="stylesheet" href="index.css">
+  
+  <style>
+    .modal-content.large  { max-width: 860px; }
+    .modal-content.xlarge { max-width: 1050px; }
+  </style>
+</head>
+<body class="dark-theme">
+  
+  <!-- LOGIN OVERLAY -->
+  <div id="login-overlay" class="login-overlay">
+    <div class="login-card glass-panel">
+      <div class="login-header">
+        <i data-lucide="wind" class="login-logo"></i>
+        <h2>SI-AC Dasmen</h2>
+        <p>Silakan masuk untuk melanjutkan</p>
+      </div>
+      <form id="loginForm" onsubmit="handleLogin(event)">
+        <div class="form-group" id="loginUserGroup">
+          <label>Username</label>
+          <input type="text" id="loginUsername" required autocomplete="username">
+        </div>
+        <div class="form-group" id="loginPassGroup">
+          <label>Password</label>
+          <input type="password" id="loginPassword" required autocomplete="current-password">
+        </div>
+        <div id="loginErrorMsg" class="login-error hidden">Username atau Password salah!</div>
+        
+        <button type="submit" class="btn btn-primary btn-login" id="btnLoginBtn">
+          <span id="btnLoginText">Masuk</span>
+          <span id="btnLoginLoader" class="loader hidden"></span>
+        </button>
+
+        <button type="button" class="btn btn-secondary btn-login hidden" id="btnConnectDbLogin" onclick="openSettingsModal()">
+          <i data-lucide="database"></i> Hubungkan Database
+        </button>
+      </form>
+      <div class="login-footer">
+        <p class="fetching-msg" id="loginInitMsg">Memuat data pengguna dari Server...</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="app-container" id="mainAppContainer" style="display: none;">
+    <aside class="sidebar glass-panel">
+      <div class="logo">
+        <i data-lucide="wind"></i>
+        <span>SI-AC Dasmen</span>
+      </div>
+      <nav class="nav-links">
+        <button id="nav-dashboard" class="nav-btn active" onclick="switchTab('dashboard')">
+          <i data-lucide="layout-dashboard"></i> Dashboard
+        </button>
+        <button id="nav-data" class="nav-btn" onclick="switchTab('data')">
+          <i data-lucide="database"></i> Data AC Utama
+        </button>
+        <button id="nav-pemeliharaan" class="nav-btn" onclick="switchTab('pemeliharaan')">
+          <i data-lucide="wrench"></i> Log Pemeliharaan
+        </button>
+        <button id="nav-mutasi" class="nav-btn" onclick="switchTab('mutasi')">
+          <i data-lucide="arrow-right-left"></i> Log Mutasi
+        </button>
+        <button id="nav-usul-hapus" class="nav-btn" onclick="switchTab('usul-hapus')">
+          <i data-lucide="trash"></i> Log Usul Hapus
+        </button>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="theme-toggle" onclick="toggleTheme()">
+          <i data-lucide="sun" id="theme-icon"></i>
+          <span id="theme-text">Light Mode</span>
+        </div>
+        <div class="logout-btn" onclick="logout()">
+          <i data-lucide="log-out"></i>
+          <span>Keluar</span>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="top-header glass-panel">
+        <h1 id="page-title">Dashboard Statistik</h1>
+        <div class="user-profile">
+          <button class="btn-icon" onclick="openSettingsModal()" title="Pengaturan Target Database" style="margin-right: 16px;">
+            <i data-lucide="database"></i> <span style="font-size: 0.9rem;">Database</span>
+          </button>
+          <button class="btn-icon" onclick="toggleTheme()" title="Ganti Tema" style="margin-right: 16px;">
+            <i id="theme-icon-top" data-lucide="moon"></i> <span id="theme-text-top" style="font-size: 0.9rem;">Light Mode</span>
+          </button>
+          <div class="avatar"><i data-lucide="user"></i></div>
+          <span>Admin PAUD</span>
+        </div>
+      </header>
+
+      <div class="content-wrapper">
+
+        <!-- ================= DASHBOARD ================= -->
+        <section id="view-dashboard" class="view-section active">
+          <div class="stats-grid">
+            <div class="stat-card glass-panel gradient-blue">
+              <div class="stat-icon"><i data-lucide="air-vent"></i></div>
+              <div class="stat-info"><h3>Total Unit AC</h3><h2 id="stat-total-ac">0</h2></div>
+            </div>
+            <div class="stat-card glass-panel gradient-purple">
+              <div class="stat-icon"><i data-lucide="building-2"></i></div>
+              <div class="stat-info"><h3>Total Gedung</h3><h2 id="stat-total-gedung">0</h2></div>
+            </div>
+            <div class="stat-card glass-panel gradient-green">
+              <div class="stat-icon"><i data-lucide="tag"></i></div>
+              <div class="stat-info"><h3>Merk Terbanyak</h3><h2 id="stat-top-merk">-</h2></div>
+            </div>
+            <div class="stat-card glass-panel gradient-orange">
+              <div class="stat-icon"><i data-lucide="zap"></i></div>
+              <div class="stat-info"><h3>Estimasi Total PK</h3><h2 id="stat-total-pk">0 PK</h2></div>
+            </div>
+          </div>
+          <div class="charts-grid">
+            <div class="chart-card glass-panel">
+              <h3>Distribusi AC per Gedung</h3>
+              <div class="chart-container"><canvas id="chartGedung"></canvas></div>
+            </div>
+            <div class="chart-card glass-panel">
+              <h3>Distribusi Merk AC</h3>
+              <div class="chart-container"><canvas id="chartMerk"></canvas></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= DATA AC UTAMA ================= -->
+        <section id="view-data" class="view-section hidden">
+          <div class="data-controls glass-panel">
+            <div class="filter-actions" id="filterActionsData">
+              <div class="search-bar" data-id="data-search">
+                <i data-lucide="search"></i>
+                <input type="text" id="searchInput" placeholder="Cari ruangan, gedung, merk, atau SN..." onkeyup="filterData()">
+              </div>
+              <select id="filterGedung" data-id="data-gedung" onchange="filterData()"><option value="">Semua Gedung</option></select>
+              <select id="filterLokasi" data-id="data-lokasi" onchange="filterData()"><option value="">Semua Lokasi</option></select>
+              <select id="filterMerk" data-id="data-merk" onchange="filterData()"><option value="">Semua Merk</option></select>
+              <button class="btn-secondary no-drag" data-id="data-download" onclick="downloadExcel('acData')" title="Download Excel"><i data-lucide="download"></i></button>
+              <button class="btn-primary no-drag" data-id="data-tambah" onclick="openModal()"><i data-lucide="plus"></i> Tambah Data</button>
+            </div>
+          </div>
+          <div class="table-container glass-panel">
+            <table id="acTable">
+              <thead>
+                <tr>
+                  <th>No</th>
+                  <th>Gedung</th>
+                  <th>Lokasi/Ruangan</th>
+                  <th>Merk</th>
+                  <th>Jenis</th>
+                  <th>PK</th>
+                  <th>Kode Indoor</th>
+                  <th>No. Seri Indoor</th>
+                  <th>Kode Outdoor</th>
+                  <th>No. Seri Outdoor</th>
+                  <th>Unit</th>
+                  <th>BTU/h</th>
+                  <th>Daya Outdoor</th>
+                  <th>Daya Indoor</th>
+                  <th>Tahun</th>
+                  <th>Logo SKEM</th>
+                  <th>Barcode BMN</th>
+                  <th>Keterangan</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="tableBody"></tbody>
+            </table>
+            <div class="pagination">
+              <button id="btnPrev" class="btn-icon" onclick="prevPage()"><i data-lucide="chevron-left"></i></button>
+              <span id="pageInfo">Halaman 1 dari 1</span>
+              <button id="btnNext" class="btn-icon" onclick="nextPage()"><i data-lucide="chevron-right"></i></button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= LOG PEMELIHARAAN ================= -->
+        <section id="view-pemeliharaan" class="view-section hidden">
+          <div class="data-controls glass-panel">
+            <div class="filter-actions" id="filterActionsPemeliharaan">
+              <div class="search-bar" data-id="pm-search"><i data-lucide="search"></i><input type="text" id="searchPemeliharaan" placeholder="Cari laporan..." onkeyup="filterLog('pemeliharaan')"></div>
+              <div class="filter-group" data-id="pm-date">
+                <select id="filterTglKategoriPemeliharaan" onchange="filterLog('pemeliharaan')">
+                  <option value="tanggal_laporan">Tgl Lapor</option>
+                  <option value="tanggal_servis_cek">Tgl Servis</option>
+                  <option value="tanggal_selesai">Tgl Selesai</option>
+                </select>
+                <input type="date" id="filterTglStartPemeliharaan" onchange="filterLog('pemeliharaan')" title="Tanggal Awal">
+                <span style="color: var(--text-secondary); font-weight: 500; font-size: 14px;">s.d.</span>
+                <input type="date" id="filterTglEndPemeliharaan" onchange="filterLog('pemeliharaan')" title="Tanggal Akhir">
+              </div>
+              <div class="filter-group" data-id="pm-seri">
+                <input type="text" id="filterSeriPemeliharaan" list="datalistSeriPemeliharaan" placeholder="Semua No Seri" onkeyup="filterLog('pemeliharaan')" onchange="filterLog('pemeliharaan')">
+                <datalist id="datalistSeriPemeliharaan"></datalist>
+              </div>
+              <select id="filterTindakanPemeliharaan" data-id="pm-tindakan" onchange="filterLog('pemeliharaan')"><option value="">Semua Tindakan</option></select>
+              <select id="filterStatusPemeliharaan" data-id="pm-status" onchange="filterLog('pemeliharaan')"><option value="">Semua Status</option></select>
+              <button class="btn-secondary no-drag" data-id="pm-download" onclick="downloadExcel('pemeliharaan')" title="Download Excel"><i data-lucide="download"></i></button>
+              <button class="btn-primary no-drag" data-id="pm-tambah" onclick="openModalLog('pemeliharaan')"><i data-lucide="plus"></i> Tambah Log</button>
+            </div>
+          </div>
+          <div class="table-container glass-panel">
+            <table>
+              <thead><tr><th>Tgl Laporan</th><th>Pelapor</th><th>No Seri</th><th>Lokasi</th><th>Keluhan</th><th>Tgl Servis</th><th>Vendor/Teknisi</th><th>Jenis Tindakan</th><th>Tindakan Perbaikan</th><th>Tgl Selesai</th><th>Status</th><th>Keterangan</th><th>Aksi</th></tr></thead>
+              <tbody id="tableBodyPemeliharaan"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ================= LOG MUTASI ================= -->
+        <section id="view-mutasi" class="view-section hidden">
+          <div class="data-controls glass-panel">
+            <div class="filter-actions" id="filterActionsMutasi">
+              <div class="search-bar" data-id="mu-search"><i data-lucide="search"></i><input type="text" id="searchMutasi" placeholder="Cari mutasi..." onkeyup="filterLog('mutasi')"></div>
+              <div class="filter-group" data-id="mu-date">
+                <span style="color: var(--text-secondary); font-weight: 500; font-size: 14px;">Tgl Mutasi:</span>
+                <input type="date" id="filterTglStartMutasi" onchange="filterLog('mutasi')" title="Tanggal Awal">
+                <span style="color: var(--text-secondary); font-weight: 500; font-size: 14px;">s.d.</span>
+                <input type="date" id="filterTglEndMutasi" onchange="filterLog('mutasi')" title="Tanggal Akhir">
+              </div>
+              <button class="btn-secondary no-drag" data-id="mu-download" onclick="downloadExcel('mutasi')" title="Download Excel"><i data-lucide="download"></i></button>
+              <button class="btn-primary no-drag" data-id="mu-tambah" onclick="openModalLog('mutasi')"><i data-lucide="plus"></i> Tambah Log</button>
+            </div>
+          </div>
+          <div class="table-container glass-panel">
+            <table>
+              <thead><tr><th>Tgl Mutasi</th><th>NO. SERI</th><th>GEDUNG ASAL</th><th>LOKASI ASAL</th><th>GEDUNG TUJUAN</th><th>LOKASI TUJUAN</th><th>ALASAN</th><th>Pelaksana</th><th>Status</th><th>Aksi</th></tr></thead>
+              <tbody id="tableBodyMutasi"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ================= LOG USUL HAPUS ================= -->
+        <section id="view-usul-hapus" class="view-section hidden">
+          <div class="data-controls glass-panel">
+            <div class="filter-actions" id="filterActionsUsulHapus">
+              <div class="search-bar" data-id="uh-search"><i data-lucide="search"></i><input type="text" id="searchUsulHapus" placeholder="Cari usul hapus..." onkeyup="filterLog('usul-hapus')"></div>
+              <div class="filter-group" data-id="uh-date">
+                <select id="filterTglKategoriUsulHapus" onchange="filterLog('usul-hapus')">
+                  <option value="tanggal_usulan">Tgl Usulan</option>
+                  <option value="tanggal_masuk_gudang">Masuk Gudang</option>
+                </select>
+                <input type="date" id="filterTglStartUsulHapus" onchange="filterLog('usul-hapus')" title="Tanggal Awal">
+                <span style="color: var(--text-secondary); font-weight: 500; font-size: 14px;">s.d.</span>
+                <input type="date" id="filterTglEndUsulHapus" onchange="filterLog('usul-hapus')" title="Tanggal Akhir">
+              </div>
+              <button class="btn-secondary no-drag" data-id="uh-download" onclick="downloadExcel('usul-hapus')" title="Download Excel"><i data-lucide="download"></i></button>
+              <button class="btn-primary no-drag" data-id="uh-tambah" onclick="openModalLog('usul-hapus')"><i data-lucide="plus"></i> Tambah Log</button>
+            </div>
+          </div>
+          <div class="table-container glass-panel">
+            <table>
+              <thead><tr><th>Tgl Usulan</th><th>Tgl Masuk Gudang</th><th>No Nota</th><th>No Seri</th><th>Kondisi</th><th>Lokasi Gudang</th><th>Status</th><th>Aksi</th></tr></thead>
+              <tbody id="tableBodyUsulHapus"></tbody>
+            </table>
+          </div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- ========== Modal Data AC Utama (LENGKAP) ========== -->
+  <div id="crudModal" class="modal-overlay hidden">
+    <div class="modal-content xlarge glass-panel">
+      <div class="modal-header"><h2 id="modalTitle">Tambah Data AC</h2><button class="btn-icon" onclick="closeModal()"><i data-lucide="x"></i></button></div>
+      <form id="crudForm" onsubmit="saveData(event)">
+        <input type="hidden" id="editId">
+        <div class="form-grid">
+          <div class="form-group"><label>Gedung</label><input type="text" id="inputGedung" list="datalistGedung" oninput="updateFormDatalists()" required><datalist id="datalistGedung"></datalist></div>
+          <div class="form-group"><label>Lokasi / Ruangan</label><input type="text" id="inputLokasi" list="datalistLokasi" oninput="updateFormDatalists()" required><datalist id="datalistLokasi"></datalist></div>
+          <div class="form-group"><label>Merk</label><input type="text" id="inputMerk" list="datalistMerk" required><datalist id="datalistMerk"></datalist></div>
+          <div class="form-group">
+            <label>Jenis</label>
+            <select id="inputJenis">
+              <option value="">-- Pilih Jenis --</option>
+              <option value="Split">Split</option>
+              <option value="Cassette">Cassette</option>
+              <option value="Standing">Standing</option>
+            </select>
+          </div>
+          <div class="form-group"><label>Kode Indoor</label><input type="text" id="inputKodeIndoor"></div>
+          <div class="form-group"><label>No. Seri Indoor</label><input type="text" id="inputSeriIndoor"></div>
+          <div class="form-group"><label>Kode Outdoor</label><input type="text" id="inputKodeOutdoor"></div>
+          <div class="form-group"><label>No. Seri Outdoor</label><input type="text" id="inputSeriOutdoor"></div>
+          <div class="form-group"><label>Unit</label><input type="number" id="inputUnit" min="1"></div>
+          <div class="form-group"><label>PK</label><input type="text" id="inputPK"></div>
+          <div class="form-group"><label>BTU/h</label><input type="number" id="inputBTU"></div>
+          <div class="form-group"><label>Daya Outdoor (Watt)</label><input type="number" id="inputDayaOutdoor"></div>
+          <div class="form-group"><label>Daya Indoor (Watt)</label><input type="number" id="inputDayaIndoor"></div>
+          <div class="form-group"><label>Tahun</label><input type="number" id="inputTahun" min="1990" max="2100"></div>
+          <div class="form-group">
+            <label>Logo SKEM</label>
+            <select id="inputSKEM">
+              <option value="">-- Pilih --</option>
+              <option value="Ada">Ada</option>
+              <option value="Tidak ada">Tidak ada</option>
+            </select>
+          </div>
+          <div class="form-group"><label>Barcode BMN (NUP)</label><input type="text" id="inputBarcode"></div>
+          <div class="form-group" style="grid-column: 1 / -1;"><label>Keterangan</label><input type="text" id="inputKeterangan"></div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" onclick="closeModal()">Batal</button>
+          <button type="submit" class="btn-primary">Simpan Data</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ========== Modal Log Pemeliharaan ========== -->
+  <div id="modalPemeliharaan" class="modal-overlay hidden">
+    <div class="modal-content large glass-panel">
+      <div class="modal-header"><h2 id="titlePemeliharaan">Log Pemeliharaan</h2><button class="btn-icon" onclick="closeLogModal('pemeliharaan')"><i data-lucide="x"></i></button></div>
+      <form id="formPemeliharaan" onsubmit="saveLog(event, 'pemeliharaan')">
+        <input type="hidden" id="editIdPemeliharaan">
+        <div class="form-grid">
+          <div class="form-group"><label>Tanggal Laporan</label><input type="date" id="p_tglLaporan" required></div>
+          <div class="form-group"><label>Nama Pelapor</label><input type="text" id="p_pelapor" required></div>
+          <div class="form-group">
+            <label>No. Seri Indoor</label>
+            <div style="position: relative;">
+              <input type="text" id="p_seri" required oninput="validateSeriRealtime('p_seri', 'p_seri_status')" onchange="autoFillPemeliharaan()" style="padding-right: 32px; width: 100%;">
+              <span id="p_seri_status" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); display: flex; align-items: center;"></span>
+            </div>
+          </div>
+          <div class="form-group"><label>Lokasi (Otomatis)</label><input type="text" id="p_lokasi_auto" readonly style="background-color: rgba(255,255,255,0.1); font-style: italic;"></div>
+          <div class="form-group">
+            <label>Keluhan Awal</label>
+            <select id="p_keluhan" required>
+              <option value="">-- Pilih Keluhan --</option>
+              <option value="Servis Berkala">Servis Berkala</option>
+              <option value="AC bocor">AC bocor</option>
+              <option value="Tidak dingin">Tidak dingin</option>
+              <option value="Suara berisik">Suara berisik</option>
+              <option value="Perawatan rutin">Perawatan rutin</option>
+              <option value="Mati total">Mati total</option>
+              <option value="AC Mati, Indikator berkedip">AC Mati, Indikator berkedip</option>
+              <option value="AC mati mendadak">AC mati mendadak</option>
+            </select>
+          </div>
+          <div class="form-group"><label>Tanggal Servis / Cek</label><input type="date" id="p_tglServis"></div>
+          <div class="form-group"><label>Vendor / Teknisi</label><input type="text" id="p_vendor"></div>
+          <div class="form-group">
+            <label>Jenis Tindakan</label>
+            <select id="p_tindakan" required>
+              <option value="">-- Pilih Tindakan --</option>
+              <option value="Service berkala 1">Service berkala 1</option>
+              <option value="Service berkala 2">Service berkala 2</option>
+              <option value="Service berkala 3">Service berkala 3</option>
+              <option value="Service berkala 4">Service berkala 4</option>
+              <option value="Tambah Freon">Tambah Freon</option>
+              <option value="Ganti Sparepart">Ganti Sparepart</option>
+              <option value="Perbaikan lainnya">Perbaikan lainnya</option>
+              <option value="Perbaikan Ringan">Perbaikan Ringan</option>
+              <option value="Bongkar">Bongkar</option>
+            </select>
+          </div>
+          <div class="form-group"><label>Tindakan Perbaikan</label><input type="text" id="p_tindakanPerbaikan"></div>
+          <div class="form-group"><label>Tanggal Selesai</label><input type="date" id="p_tglSelesai"></div>
+          <div class="form-group">
+            <label>Status Akhir</label>
+            <select id="p_status">
+              <option value="Pengajuan unit baru">Pengajuan unit baru</option>
+              <option value="Usul Hapus">Usul Hapus</option>
+              <option value="Selesai">Selesai</option>
+              <option value="Tunda">Tunda</option>
+            </select>
+          </div>
+          <div class="form-group"><label>Keterangan</label><input type="text" id="p_keterangan"></div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" onclick="closeLogModal('pemeliharaan')">Batal</button>
+          <button type="submit" class="btn-primary" id="btnSubmitPemeliharaan">Simpan Log</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ========== Modal Log Mutasi ========== -->
+  <div id="modalMutasi" class="modal-overlay hidden">
+    <div class="modal-content large glass-panel">
+      <div class="modal-header"><h2 id="titleMutasi">Log Mutasi</h2><button class="btn-icon" onclick="closeLogModal('mutasi')"><i data-lucide="x"></i></button></div>
+      <form id="formMutasi" onsubmit="saveLog(event, 'mutasi')">
+        <input type="hidden" id="editIdMutasi">
+        <div class="form-grid" style="margin-bottom:12px">
+          <div class="form-group"><label>Tanggal Mutasi</label><input type="date" id="m_tglMutasi" required></div>
+          <div class="form-group"><label>Nama Pelaksana</label><input type="text" id="m_pelaksana"></div>
+        </div>
+        <div class="form-group" style="margin-bottom:12px">
+          <label>No. Seri Indoor</label>
+          <div style="position: relative;">
+            <input type="text" id="m_seri" required oninput="validateSeriRealtime('m_seri', 'm_seri_status')" onchange="autoFillMutasi()" style="padding-right: 32px; width: 100%;">
+            <span id="m_seri_status" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); display: flex; align-items: center;"></span>
+          </div>
+          <small style="color:var(--text-secondary)">*Lokasi asal akan terisi otomatis dari Master Data jika No. Seri ditemukan.</small>
+        </div>
+        <div class="form-grid" style="margin-bottom:12px">
+          <div class="form-group"><label>Gedung Asal (Otomatis)</label><input type="text" id="m_gedung_asal" readonly class="readonly-input"></div>
+          <div class="form-group"><label>Lokasi Asal (Otomatis)</label><input type="text" id="m_lokasi_asal" readonly class="readonly-input"></div>
+          <div class="form-group"><label>Gedung Tujuan</label><input type="text" id="m_gedung_tujuan" list="datalistGedungMutasi" oninput="updateMutasiLokasiDatalist()" required><datalist id="datalistGedungMutasi"></datalist></div>
+          <div class="form-group"><label>Lokasi Tujuan</label><input type="text" id="m_lokasi_tujuan" list="datalistLokasiMutasi" required><datalist id="datalistLokasiMutasi"></datalist></div>
+        </div>
+        <div class="form-group" style="margin-bottom:12px"><label>Alasan Mutasi</label><input type="text" id="m_alasan"></div>
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" onclick="closeLogModal('mutasi')">Batal</button>
+          <button type="submit" class="btn-primary" id="btnSubmitMutasi">Simpan & Proses</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ========== Modal Log Usul Hapus ========== -->
+  <div id="modalUsulHapus" class="modal-overlay hidden">
+    <div class="modal-content large glass-panel">
+      <div class="modal-header"><h2 id="titleUsulHapus">Log Usul Hapus</h2><button class="btn-icon" onclick="closeLogModal('usul-hapus')"><i data-lucide="x"></i></button></div>
+      <form id="formUsulHapus" onsubmit="saveLog(event, 'usul-hapus')">
+        <input type="hidden" id="editIdUsulHapus">
+        <div class="form-grid" style="margin-bottom:12px">
+          <div class="form-group"><label>Tanggal Usulan</label><input type="date" id="h_tglUsulan" required onchange="autoFillNoNota()"></div>
+          <div class="form-group">
+            <label>No. Seri Indoor</label>
+            <div style="position: relative;">
+              <input type="text" id="h_seri" required oninput="validateSeriRealtime('h_seri', 'h_seri_status')" style="padding-right: 32px; width: 100%;">
+              <span id="h_seri_status" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); display: flex; align-items: center;"></span>
+            </div>
+          </div>
+          <div class="form-group"><label>Tgl Masuk Gudang</label><input type="date" id="h_tglMasukGudang"></div>
+        </div>
+        <div class="form-group" style="margin-bottom:12px"><label>No Nota Dinas</label><input type="text" id="h_nota"></div>
+        <div class="form-group" style="margin-bottom:12px"><label>Kondisi Terakhir</label><input type="text" id="h_kondisi"></div>
+        <div class="form-group" style="margin-bottom:12px"><label>Lokasi Gudang</label><input type="text" id="h_gudang" list="datalistGudang" required><datalist id="datalistGudang"></datalist></div>
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" onclick="closeLogModal('usul-hapus')">Batal</button>
+          <button type="submit" class="btn-primary" id="btnSubmitUsulHapus">Simpan & Proses</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ========== Modal Pengaturan Database ========== -->
+  <div id="settingsModal" class="modal-overlay hidden">
+    <div class="modal-content glass-panel" style="max-width: 500px;">
+      <div class="modal-header">
+        <h2 style="font-size: 1.2rem;">⚙️ Pengaturan Target Database</h2>
+        <button class="btn-icon" onclick="closeSettingsModal()"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body">
+        <p style="margin-bottom: 12px; font-size: 0.9rem; color: #64748b;">
+          Tempelkan (Paste) Link Google Spreadsheet yang ingin Anda jadikan database target. Aplikasi akan otomatis berpindah dan mensinkronisasikan data ke sana.
+        </p>
+        <div class="form-group">
+          <label>Link Google Spreadsheet:</label>
+          <input type="text" id="inputSpreadsheetLink" placeholder="https://docs.google.com/spreadsheets/d/..." style="width: 100%;" required>
+        </div>
+      </div>
+      <div class="modal-actions" style="justify-content: space-between; margin-top: 24px;">
+        <button type="button" class="btn-primary" style="background-color: #ef4444;" onclick="disconnectDatabase()">Putuskan Koneksi</button>
+        <div style="display: flex; gap: 12px;">
+          <button class="btn-secondary" onclick="closeSettingsModal()">Batal</button>
+          <button class="btn-primary" onclick="saveDatabaseSettings()">Simpan & Hubungkan</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="data.js"></script>
+  <script src="app.js?v=22"></script>
+</body>
+</html>
+
+
+
