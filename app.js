@@ -1119,7 +1119,7 @@ function deleteLog(id, type) {
 // Helper untuk memastikan nilai masuk ke dropdown meskipun tidak ada di daftar opsi
 function setSelectValueOrAdd(selectId, value) {
   const sel = document.getElementById(selectId);
-  if (!sel || value === undefined || value === null || value === '') return;
+  if (!sel || value === undefined || value === null || value === '' || !sel.options) return;
   
   const valStr = String(value);
   let exists = false;
@@ -1279,6 +1279,12 @@ function saveLog(event, type) {
     if (noSeri && !acData.some(x => x['No. Seri Indoor'] == noSeri)) {
       alert(`⛔ GAGAL DISIMPAN: Nomor Seri Indoor "${noSeri}" tidak terdaftar di Data AC Utama.\n\nSilakan cek kembali penulisan Anda atau daftarkan AC tersebut di Master Data terlebih dahulu.`);
       return; // Blokir penyimpanan
+    }
+
+    // PENGAMAN: Cegah Pemeliharaan jika sudah ada di Usul Hapus
+    if (noSeri && logUsulHapus.some(x => x.no_seri_indoor == noSeri)) {
+      alert(`⛔ GAGAL DISIMPAN: Nomor Seri "${noSeri}" sudah berada di daftar Usul Hapus (Gudang).\n\nAC yang sudah diusulkan hapus tidak dapat dipelihara/diservis lagi.`);
+      return;
     }
 
     const newData = {
@@ -1526,8 +1532,8 @@ function validateSeriRealtime(inputId, statusId) {
   let isValid = exists;
   let errorMsg = '';
   
-  // Pengaman Mutasi: Jika form mutasi, pastikan AC tidak di Usul Hapus
-  if (exists && inputId === 'm_seri') {
+  // Pengaman: Jika form mutasi atau pemeliharaan, pastikan AC tidak di Usul Hapus
+  if (exists && (inputId === 'm_seri' || inputId === 'p_seri')) {
     const isUsulHapus = logUsulHapus.some(x => x.no_seri_indoor == val);
     if (isUsulHapus) {
       isValid = false;
