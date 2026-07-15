@@ -646,6 +646,21 @@ function updateGudangDatalist() {
   dlGudang.innerHTML = Array.from(gudangSet).sort().map(x => `<option value="${x}">`).join('');
 }
 
+function updateStatusAkhirDatalist() {
+  const dlStatus = document.getElementById('statusAkhirList');
+  if (!dlStatus) return;
+  const statusSet = new Set(['Pengajuan unit baru', 'Selesai', 'Tunda', 'Usul Hapus']);
+  
+  if (typeof logPemeliharaan !== 'undefined') {
+    logPemeliharaan.forEach(log => {
+      const s = log.status_akhir;
+      if (s) statusSet.add(s.trim());
+    });
+  }
+  
+  dlStatus.innerHTML = Array.from(statusSet).sort().map(x => `<option value="${x}">`).join('');
+}
+
 function initFilters() {
   updateDependentDropdowns();
   initLogFiltersPemeliharaan();
@@ -1061,6 +1076,8 @@ function openModalLog(type) {
   document.getElementById(modalId).classList.add('show');
   if (type === 'usul-hapus') {
     updateGudangDatalist();
+  } else if (type === 'pemeliharaan') {
+    updateStatusAkhirDatalist();
   }
 }
 
@@ -1152,7 +1169,7 @@ function editLog(id, type) {
     setSelectValueOrAdd('p_tindakan', item.jenis_tindakan);
     document.getElementById('p_tindakanPerbaikan').value = item.tindakan_perbaikan || '';
     document.getElementById('p_tglSelesai').value = formatDateForInput(item.tanggal_selesai);
-    setSelectValueOrAdd('p_status', item.status_akhir);
+    document.getElementById('p_status').value = item.status_akhir || '';
     document.getElementById('p_keterangan').value = item.keterangan || '';
     document.getElementById('btnSubmitPemeliharaan').innerText = 'Update Log';
     openModalLog('pemeliharaan');

@@ -359,7 +359,7 @@
           <div class="form-group"><label>Vendor / Teknisi</label><input type="text" id="p_vendor"></div>
           <div class="form-group">
             <label>Jenis Tindakan</label>
-            <select id="p_tindakan" required>
+            <select id="p_tindakan">
               <option value="">-- Pilih Tindakan --</option>
               <option value="Service berkala 1">Service berkala 1</option>
               <option value="Service berkala 2">Service berkala 2</option>
@@ -376,12 +376,13 @@
           <div class="form-group"><label>Tanggal Selesai</label><input type="date" id="p_tglSelesai"></div>
           <div class="form-group">
             <label>Status Akhir</label>
-            <select id="p_status">
-              <option value="Pengajuan unit baru">Pengajuan unit baru</option>
-              <option value="Usul Hapus">Usul Hapus</option>
-              <option value="Selesai">Selesai</option>
-              <option value="Tunda">Tunda</option>
-            </select>
+            <input type="text" id="p_status" list="statusAkhirList" placeholder="Ketik atau pilih status...">
+            <datalist id="statusAkhirList">
+              <option value="Pengajuan unit baru">
+              <option value="Usul Hapus">
+              <option value="Selesai">
+              <option value="Tunda">
+            </datalist>
           </div>
           <div class="form-group"><label>Keterangan</label><input type="text" id="p_keterangan"></div>
         </div>
