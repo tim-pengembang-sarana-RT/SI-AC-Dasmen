@@ -1423,16 +1423,70 @@ function downloadExcel(type) {
   let filename = '';
 
   if (type === 'acData') {
-    dataToExport = filteredData;
+    dataToExport = filteredData.map((item, index) => ({
+      "NO": index + 1,
+      "GEDUNG": item.Gedung || '-',
+      "LOKASI": item.Lokasi || '-',
+      "MERK": item.Merk || '-',
+      "JENIS": item.Jenis || '-',
+      "PK": item.PK || '-',
+      "KODE INDOOR": item['Kode Indoor'] || '-',
+      "NO SERI INDOOR": item['No. Seri Indoor'] || '-',
+      "KODE OUTDOOR": item['Kode Outdoor'] || '-',
+      "NO SERI OUTDOOR": item['No. Seri Outdoor'] || '-',
+      "UNIT": item.Unit || '-',
+      "BTU/h": item.BTU_h || '-',
+      "DAYA OUTDOOR": item['Daya Outdoor'] || '-',
+      "DAYA INDOOR": item['Daya Indoor'] || '-',
+      "TAHUN": item.Tahun || '-',
+      "LOGO SKEM": item['Logo SKEM'] || '-',
+      "BARCODE BMN (NUP)": item['Barcode BMN (NUP)'] || '-',
+      "KETERANGAN": item.Keterangan || '-'
+    }));
     filename = 'Data_AC_Utama.xlsx';
   } else if (type === 'pemeliharaan') {
-    dataToExport = filteredLogPemeliharaan;
+    dataToExport = filteredLogPemeliharaan.map(item => {
+      const acInfo = acData.find(x => x['No. Seri Indoor'] === item.no_seri_indoor);
+      const lokasiText = acInfo ? `${acInfo.Gedung || '-'} / ${acInfo.Lokasi || '-'}` : '-';
+      return {
+        "TGL LAPORAN": formatDateUI(item.tanggal_laporan),
+        "PELAPOR": item.nama_pelapor || '-',
+        "NO SERI": item.no_seri_indoor || '-',
+        "LOKASI": lokasiText,
+        "KELUHAN": item.keluhan_awal || '-',
+        "TGL SERVIS": formatDateUI(item.tanggal_servis_cek) || '-',
+        "VENDOR/TEKNISI": item.nama_vendor_teknisi || '-',
+        "JENIS TINDAKAN": item.jenis_tindakan || '-',
+        "TINDAKAN PERBAIKAN": item.tindakan_perbaikan || '-',
+        "TGL SELESAI": formatDateUI(item.tanggal_selesai) || '-',
+        "STATUS": item.status_akhir || '-',
+        "KETERANGAN": item.keterangan || '-'
+      };
+    });
     filename = 'Log_Pemeliharaan.xlsx';
   } else if (type === 'mutasi') {
-    dataToExport = filteredLogMutasi;
+    dataToExport = filteredLogMutasi.map(item => ({
+      "TGL MUTASI": formatDateUI(item.tanggal_mutasi),
+      "NO SERI": item.no_seri_indoor || '-',
+      "GEDUNG ASAL": item.gedung_asal || item['Gedung Asal'] || '-',
+      "LOKASI ASAL": item.lokasi_asal || item['Lokasi Asal'] || '-',
+      "GEDUNG TUJUAN": item.gedung_tujuan || item['Gedung Tujuan'] || '-',
+      "LOKASI TUJUAN": item.lokasi_tujuan || item['Lokasi Tujuan'] || '-',
+      "ALASAN MUTASI": item.alasan_mutasi || item['Alasan Mutasi'] || '-',
+      "PELAKSANA": item.nama_pelaksana || '-',
+      "STATUS": item.status_mutasi || '-'
+    }));
     filename = 'Log_Mutasi.xlsx';
   } else if (type === 'usul-hapus') {
-    dataToExport = filteredLogUsulHapus;
+    dataToExport = filteredLogUsulHapus.map(item => ({
+      "TGL USULAN": formatDateUI(item.tanggal_usulan),
+      "TGL MASUK GUDANG": formatDateUI(item.tanggal_masuk_gudang) || '-',
+      "NO NOTA DINAS": item.no_nota_dinas || '-',
+      "NO SERI": item.no_seri_indoor || '-',
+      "KONDISI TERAKHIR": item.kondisi_terakhir || '-',
+      "LOKASI GUDANG": item.Lokasi_Gudang || item.lokasi_gudang || '-',
+      "STATUS SISTEM": item.status_sistem || '-'
+    }));
     filename = 'Log_Usul_Hapus.xlsx';
   }
 
