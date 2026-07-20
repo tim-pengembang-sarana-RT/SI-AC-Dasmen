@@ -962,7 +962,7 @@ function renderLogTable(type) {
     // --- End Smart Cascading ---
 
     dataToRender.forEach(item => {
-      const acInfo = acData.find(x => x['No. Seri Indoor'] === item.no_seri_indoor);
+      const acInfo = acData.find(x => x['No. Seri Indoor'] == item.no_seri_indoor);
       const lokasiText = acInfo ? `${acInfo.Gedung || '-'} / ${acInfo.Lokasi || '-'}` : '-';
       tbody.insertAdjacentHTML('beforeend', `<tr>
         <td>${formatDateUI(item.tanggal_laporan)}</td>
@@ -1446,7 +1446,7 @@ function downloadExcel(type) {
     filename = 'Data_AC_Utama.xlsx';
   } else if (type === 'pemeliharaan') {
     dataToExport = filteredLogPemeliharaan.map(item => {
-      const acInfo = acData.find(x => x['No. Seri Indoor'] === item.no_seri_indoor);
+      const acInfo = acData.find(x => x['No. Seri Indoor'] == item.no_seri_indoor);
       const lokasiText = acInfo ? `${acInfo.Gedung || '-'} / ${acInfo.Lokasi || '-'}` : '-';
       return {
         "TGL LAPORAN": formatDateUI(item.tanggal_laporan),
