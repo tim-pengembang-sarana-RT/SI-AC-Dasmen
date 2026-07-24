@@ -564,6 +564,7 @@ function updateFormDatalists() {
   const gedungSet = new Set();
   const lokasiSet = new Set();
   const merkSet = new Set();
+  const barcodeSet = new Set();
   
   const allLokasiSet = new Set();
   const allMerkSet = new Set();
@@ -572,6 +573,7 @@ function updateFormDatalists() {
     if (item.Gedung) gedungSet.add(item.Gedung);
     if (item.Lokasi) allLokasiSet.add(item.Lokasi);
     if (item.Merk) allMerkSet.add(item.Merk);
+    if (item['Barcode BMN (NUP)']) barcodeSet.add(item['Barcode BMN (NUP)']);
     
     const itemGedung = String(item.Gedung || '').trim().toLowerCase();
     const matchGedung = currentGedung === "" || itemGedung === currentGedung;
@@ -596,6 +598,7 @@ function updateFormDatalists() {
   populateDatalist('datalistGedung', gedungSet);
   populateDatalist('datalistLokasi', finalLokasiSet);
   populateDatalist('datalistMerk', finalMerkSet);
+  populateDatalist('datalistBarcode', barcodeSet);
 }
 
 // --- LOG MUTASI DATALIST LOGIC ---
