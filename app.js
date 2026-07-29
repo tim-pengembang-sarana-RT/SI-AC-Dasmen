@@ -573,7 +573,12 @@ function updateFormDatalists() {
     if (item.Gedung) gedungSet.add(item.Gedung);
     if (item.Lokasi) allLokasiSet.add(item.Lokasi);
     if (item.Merk) allMerkSet.add(item.Merk);
-    if (item['Barcode BMN (NUP)']) barcodeSet.add(item['Barcode BMN (NUP)']);
+    if (item['Barcode BMN (NUP)']) {
+      const val = String(item['Barcode BMN (NUP)']);
+      if (!/\d/.test(val)) {
+        barcodeSet.add(item['Barcode BMN (NUP)']);
+      }
+    }
     
     const itemGedung = String(item.Gedung || '').trim().toLowerCase();
     const matchGedung = currentGedung === "" || itemGedung === currentGedung;
