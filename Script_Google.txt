@@ -213,6 +213,7 @@ var SHEET_NAMES = {
   logPemeliharaan: "log_pemeliharaan_2026",
   logMutasi: "log_mutasi_2026",
   logUsulHapus: "log_usul_hapus_2026",
+  logPemakaian: "log_pemakaian_2026",
   users: "users_2026"
 };
 
@@ -232,6 +233,23 @@ function getSpreadsheet(id) {
 // doGet: Membaca data dari Spreadsheet → dikirim ke Aplikasi Web
 // =========================================================================
 function doGet(e) {
+  var action = e.parameter.action;
+  if (action === 'sync_tuya') {
+    var deviceIdsStr = e.parameter.deviceIds || "";
+    var deviceIds = deviceIdsStr ? deviceIdsStr.split(',').filter(function(id) { return id.trim() !== ""; }) : [];
+    
+    // Batch processing: Tuya API merekomendasikan maksimal 20 device ID per request
+    var chunkSize = 20;
+    for (var i = 0; i < deviceIds.length; i += chunkSize) {
+      var chunk = deviceIds.slice(i, i + chunkSize);
+      fetchTuyaBatchStatus(chunk);
+      Utilities.sleep(500); // Jeda aman antar batch
+    }
+    
+    return ContentService.createTextOutput(JSON.stringify({success: true}))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
   var ss = getSpreadsheet(e.parameter.id);
   if (!ss) {
     return ContentService.createTextOutput(JSON.stringify({error: "Spreadsheet tidak ditemukan atau Anda tidak memiliki akses ke sana."}))
@@ -315,6 +333,33 @@ function doPost(e) {
     var payload = body.payload;
     if (!payload) {
       return ContentService.createTextOutput(JSON.stringify({error: "Payload kosong"}))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    // CUSTOM ACTION: Toggle AC (IoT)
+    if (payload.action === 'toggle_ac') {
+      var deviceId = payload.deviceId;
+      var turnOn = payload.turnOn;
+      var commandSuccess = sendTuyaCommand(deviceId, turnOn);
+      
+      if (commandSuccess) {
+        Utilities.sleep(1500);
+        fetchTuyaDeviceStatus(deviceId); 
+      }
+      
+      return ContentService.createTextOutput(JSON.stringify({success: commandSuccess}))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    // CUSTOM ACTION: Sync Tuya (Tarik data terbaru saat tombol Refresh ditekan)
+    if (payload.action === 'sync_tuya') {
+      var deviceIds = payload.deviceIds || [];
+      for (var i = 0; i < deviceIds.length; i++) {
+        fetchTuyaDeviceStatus(deviceIds[i]);
+        // Beri sedikit jeda antar request agar tidak kena rate limit Tuya
+        Utilities.sleep(500); 
+      }
+      return ContentService.createTextOutput(JSON.stringify({success: true}))
         .setMimeType(ContentService.MimeType.JSON);
     }
     
@@ -407,4 +452,232 @@ function doPost(e) {
     return ContentService.createTextOutput(JSON.stringify({error: error.toString()}))
       .setMimeType(ContentService.MimeType.JSON);
   }
+}
+
+// =========================================================================
+// ROBOT 3: INTEGRASI IoT TUYA / BARDI SMART BREAKER (ENTERPRISE 200 AC)
+// =========================================================================
+var TUYA_CLIENT_ID = "ytkeaq3npjgjusjwh5e5";
+var TUYA_CLIENT_SECRET = "fbe2f5a22abb4de1bf7367d8f4b87a71";
+var TUYA_DEVICE_ID = "bf0fc3897a43d32f4c89u6"; 
+var TUYA_REGION = "https://openapi.tuyaeu.com"; // Endpoint untuk Central Europe
+
+function fetchTuyaBatchStatus(deviceIdsArray) {
+  if (TUYA_CLIENT_ID === "MASUKKAN_CLIENT_ID_DI_SINI" || !deviceIdsArray || deviceIdsArray.length === 0) {
+    return;
+  }
+
+  var token = getTuyaToken();
+  if (!token) return;
+
+  var idsStr = deviceIdsArray.join(',');
+  var timestamp = new Date().getTime().toString();
+  var method = "GET";
+  // Gunakan endpoint batch status dari Tuya
+  var path = "/v1.0/devices/status?device_ids=" + idsStr;
+  
+  var contentHash = getSha256Hash("");
+  var stringToSign = method + "\n" + contentHash + "\n" + "" + "\n" + path;
+  
+  var signStr = TUYA_CLIENT_ID + token + timestamp + stringToSign;
+  var sign = computeHmacSha256(signStr, TUYA_CLIENT_SECRET).toUpperCase();
+  
+  var url = TUYA_REGION + path;
+  var options = {
+    "method": method,
+    "headers": {
+      "client_id": TUYA_CLIENT_ID,
+      "access_token": token,
+      "sign": sign,
+      "sign_method": "HMAC-SHA256",
+      "t": timestamp
+    },
+    "muteHttpExceptions": true
+  };
+  
+  var response = UrlFetchApp.fetch(url, options);
+  var json = JSON.parse(response.getContentText());
+  
+  console.log("TUYA BATCH RESPONSE:", json);
+  
+  if (json.success && json.result) {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName("log_pemakaian_2026");
+    if (!sheet) return;
+
+    var cache = CacheService.getScriptCache();
+    var currentTime = new Date();
+    
+    // Hasil batch: json.result adalah array objek { id: "dev_id", status: [ {code: "switch_1", value: true} ] }
+    for (var i = 0; i < json.result.length; i++) {
+      var device = json.result[i];
+      var devId = device.id;
+      var statusArr = device.status || [];
+      
+      var isOn = false;
+      for (var j = 0; j < statusArr.length; j++) {
+        if (statusArr[j].code === "switch_1") {
+          isOn = statusArr[j].value;
+        }
+      }
+      
+      var currentStatusStr = isOn ? "ON" : "OFF";
+      var cacheKey = "STATUS_" + devId;
+      var lastStatus = cache.get(cacheKey);
+      
+      // HANYA TULIS KE SPREADSHEET JIKA STATUS BERUBAH ATAU BELUM PERNAH DICATAT
+      if (lastStatus !== currentStatusStr) {
+        sheet.appendRow([currentTime, devId, currentStatusStr]);
+        // Simpan status baru ke RAM Google selama 6 jam (maksimal batas cache)
+        cache.put(cacheKey, currentStatusStr, 21600); 
+      }
+    }
+  } else {
+    // Jika endpoint batch gagal karena versi API, fallback ke per-device
+    console.log("BATCH GAGAL, mencoba per-device. Pesan:", json.msg);
+    for (var k = 0; k < deviceIdsArray.length; k++) {
+      fetchTuyaSingleStatusFallback(deviceIdsArray[k]);
+    }
+  }
+}
+
+// Fallback jika API batching tidak diizinkan oleh cloud project Tuya
+function fetchTuyaSingleStatusFallback(targetDevice) {
+  var token = getTuyaToken();
+  if (!token) return;
+  var timestamp = new Date().getTime().toString();
+  var method = "GET";
+  var path = "/v1.0/iot-03/devices/" + targetDevice + "/status";
+  var contentHash = getSha256Hash("");
+  var stringToSign = method + "\n" + contentHash + "\n" + "" + "\n" + path;
+  var signStr = TUYA_CLIENT_ID + token + timestamp + stringToSign;
+  var sign = computeHmacSha256(signStr, TUYA_CLIENT_SECRET).toUpperCase();
+  var url = TUYA_REGION + path;
+  var response = UrlFetchApp.fetch(url, {
+    "method": method,
+    "headers": {
+      "client_id": TUYA_CLIENT_ID, "access_token": token, "sign": sign,
+      "sign_method": "HMAC-SHA256", "t": timestamp
+    },
+    "muteHttpExceptions": true
+  });
+  var json = JSON.parse(response.getContentText());
+  if (json.success) {
+    var statusArr = json.result; 
+    var isOn = false;
+    for (var i = 0; i < statusArr.length; i++) {
+      if (statusArr[i].code === "switch_1") isOn = statusArr[i].value;
+    }
+    var currentStatusStr = isOn ? "ON" : "OFF";
+    var cache = CacheService.getScriptCache();
+    var lastStatus = cache.get("STATUS_" + targetDevice);
+    if (lastStatus !== currentStatusStr) {
+      var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("log_pemakaian_2026");
+      if (sheet) sheet.appendRow([new Date(), targetDevice, currentStatusStr]);
+      cache.put("STATUS_" + targetDevice, currentStatusStr, 21600);
+    }
+  }
+}
+
+function sendTuyaCommand(deviceId, turnOn) {
+  if (TUYA_CLIENT_ID === "MASUKKAN_CLIENT_ID_DI_SINI" || !deviceId) {
+    return false;
+  }
+
+  var token = getTuyaToken();
+  if (!token) return false;
+
+  var timestamp = new Date().getTime().toString();
+  var method = "POST";
+  var path = "/v1.0/iot-03/devices/" + deviceId + "/commands";
+  
+  var payload = JSON.stringify({
+    "commands": [
+      {
+        "code": "switch_1",
+        "value": turnOn
+      }
+    ]
+  });
+  
+  var contentHash = getSha256Hash(payload);
+  var stringToSign = method + "\n" + contentHash + "\n" + "" + "\n" + path;
+  
+  var signStr = TUYA_CLIENT_ID + token + timestamp + stringToSign;
+  var sign = computeHmacSha256(signStr, TUYA_CLIENT_SECRET).toUpperCase();
+  
+  var url = TUYA_REGION + path;
+  var options = {
+    "method": method,
+    "headers": {
+      "client_id": TUYA_CLIENT_ID,
+      "access_token": token,
+      "sign": sign,
+      "sign_method": "HMAC-SHA256",
+      "t": timestamp,
+      "Content-Type": "application/json"
+    },
+    "payload": payload,
+    "muteHttpExceptions": true
+  };
+  
+  try {
+    var response = UrlFetchApp.fetch(url, options);
+    var json = JSON.parse(response.getContentText());
+    console.log("TUYA COMMAND RESPONSE:", json);
+    return json.success === true;
+  } catch (e) {
+    console.error("GAGAL MENGIRIM COMMAND:", e);
+    return false;
+  }
+}
+
+function getTuyaToken() {
+  var timestamp = new Date().getTime().toString();
+  var method = "GET";
+  var path = "/v1.0/token?grant_type=1";
+  
+  var contentHash = getSha256Hash("");
+  var stringToSign = method + "\n" + contentHash + "\n" + "" + "\n" + path;
+  
+  var signStr = TUYA_CLIENT_ID + timestamp + stringToSign;
+  var sign = computeHmacSha256(signStr, TUYA_CLIENT_SECRET).toUpperCase();
+  
+  var url = TUYA_REGION + path;
+  var options = {
+    "method": method,
+    "headers": {
+      "client_id": TUYA_CLIENT_ID,
+      "sign": sign,
+      "sign_method": "HMAC-SHA256",
+      "t": timestamp
+    },
+    "muteHttpExceptions": true
+  };
+  
+  var response = UrlFetchApp.fetch(url, options);
+  var json = JSON.parse(response.getContentText());
+  
+  if (json.success) {
+    return json.result.access_token;
+  } else {
+    console.log("GAGAL MENGAMBIL TOKEN:", json.msg);
+  }
+  return null;
+}
+
+function computeHmacSha256(message, secret) {
+  var signature = Utilities.computeHmacSignature(Utilities.MacAlgorithm.HMAC_SHA_256, message, secret);
+  return signature.map(function(byte) {
+    var v = (byte < 0 ? byte + 256 : byte).toString(16);
+    return v.length == 1 ? "0" + v : v;
+  }).join("");
+}
+
+function getSha256Hash(content) {
+  var signature = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, content);
+  return signature.map(function(byte) {
+    var v = (byte < 0 ? byte + 256 : byte).toString(16);
+    return v.length == 1 ? "0" + v : v;
+  }).join("");
 }

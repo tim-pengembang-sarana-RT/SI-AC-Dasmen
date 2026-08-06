@@ -78,6 +78,9 @@
         <button id="nav-usul-hapus" class="nav-btn" onclick="switchTab('usul-hapus')">
           <i data-lucide="trash"></i> Log Usul Hapus
         </button>
+        <button id="nav-iot" class="nav-btn" onclick="switchTab('iot')">
+          <i data-lucide="radio"></i> Log Pemakaian (IoT)
+        </button>
       </nav>
       <div class="sidebar-footer">
         <div class="theme-toggle" onclick="toggleTheme()">
@@ -177,6 +180,7 @@
                   <th>Logo SKEM</th>
                   <th>Barcode BMN</th>
                   <th>Keterangan</th>
+                  <th>Device ID IoT</th>
                   <th>Aksi</th>
                 </tr>
               </thead>
@@ -272,6 +276,29 @@
           </div>
         </section>
 
+        <!-- ================= LOG PEMAKAIAN (IoT) ================= -->
+        <section id="view-iot" class="view-section hidden">
+          <div class="data-controls glass-panel">
+            <div class="filter-actions" id="filterActionsIoT">
+              <div class="search-bar" data-id="iot-search"><i data-lucide="search"></i><input type="text" id="searchIot" placeholder="Cari log pemakaian..." onkeyup="filterLog('iot')"></div>
+              <div class="filter-group" data-id="iot-date">
+                <span style="color: var(--text-secondary); font-weight: 500; font-size: 14px;">Tgl Log:</span>
+                <input type="date" id="filterTglStartIot" onchange="filterLog('iot')" title="Tanggal Awal">
+                <span style="color: var(--text-secondary); font-weight: 500; font-size: 14px;">s.d.</span>
+                <input type="date" id="filterTglEndIot" onchange="filterLog('iot')" title="Tanggal Akhir">
+              </div>
+              <button class="btn-secondary no-drag" data-id="iot-download" onclick="downloadExcel('iot')" title="Download Excel"><i data-lucide="download"></i></button>
+              <button class="btn-primary no-drag" onclick="refreshIoT()" title="Refresh Data IoT"><i data-lucide="refresh-cw"></i> Refresh Manual</button>
+            </div>
+          </div>
+          <div class="table-container glass-panel">
+            <table>
+              <thead><tr><th>Tanggal & Waktu</th><th>Device ID</th><th>Nomor Seri AC</th><th>Lokasi / Ruangan</th><th>Status AC</th><th>Durasi Pemakaian</th><th>Aksi</th></tr></thead>
+              <tbody id="tableBodyIot"></tbody>
+            </table>
+          </div>
+        </section>
+
       </div>
     </main>
   </div>
@@ -314,7 +341,8 @@
             </select>
           </div>
           <div class="form-group"><label>Barcode BMN (NUP)</label><input type="text" id="inputBarcode" list="datalistBarcode"><datalist id="datalistBarcode"></datalist></div>
-          <div class="form-group" style="grid-column: 1 / -1;"><label>Keterangan</label><input type="text" id="inputKeterangan"></div>
+          <div class="form-group"><label>Keterangan</label><input type="text" id="inputKeterangan"></div>
+          <div class="form-group"><label>Device ID IoT</label><input type="text" id="inputDeviceId" placeholder="Opsional (Kosongkan jika tidak ada)"></div>
         </div>
         <div class="modal-actions">
           <button type="button" class="btn-secondary" onclick="closeModal()">Batal</button>
@@ -336,7 +364,7 @@
           <div class="form-group">
             <label>No. Seri Indoor</label>
             <div style="position: relative;">
-              <input type="text" id="p_seri" required oninput="validateSeriRealtime('p_seri', 'p_seri_status')" onchange="autoFillPemeliharaan()" style="padding-right: 32px; width: 100%;">
+              <input type="text" id="p_seri" required oninput="validateSeriRealtime('p_seri', 'p_seri_status'); autoFillPemeliharaan();" style="padding-right: 32px; width: 100%;">
               <span id="p_seri_status" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); display: flex; align-items: center;"></span>
             </div>
           </div>

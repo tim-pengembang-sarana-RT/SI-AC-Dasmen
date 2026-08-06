@@ -6,14 +6,16 @@ let acData = [];
 let logPemeliharaan = [];
 let logMutasi = [];
 let logUsulHapus = [];
+let logPemakaian = [];
 let usersData = [];
 
 // Variabel untuk menyimpan hasil filter
 let filteredLogPemeliharaan = [];
 let filteredLogMutasi = [];
 let filteredLogUsulHapus = [];
+let filteredLogPemakaian = [];
 
-const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxzvWZKrFk2G2D0oB3_PoQsHeXU8DH13mwqc678C0aqTozokQbmDFjAVTfYm0dhH8tH/exec";
+const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzHzRiqXUyifctP7DkmhluWuYn30DA3ziWlDQq5Zz7SiAEmz388wIYzfvZKtYTHlq4e/exec";
 
 // --- PENGATURAN DATABASE ---
 function extractSpreadsheetId(urlOrId) {
@@ -172,6 +174,7 @@ async function initState() {
       logPemeliharaan = dbData.logPemeliharaan || [];
       logMutasi = dbData.logMutasi || [];
       logUsulHapus = dbData.logUsulHapus || [];
+      logPemakaian = dbData.logPemakaian || [];
       usersData = dbData.users || [];
       
       // Update login status message
@@ -386,11 +389,25 @@ function switchTab(tabId) {
     'data': 'Manajemen Data AC',
     'pemeliharaan': 'Log Pemeliharaan',
     'mutasi': 'Log Mutasi AC',
-    'usul-hapus': 'Log Usul Penghapusan'
+    'usul-hapus': 'Log Usul Penghapusan',
+    'iot': 'Log Pemakaian (IoT)'
   };
   document.getElementById('page-title').innerText = titles[tabId];
 
   if (tabId === 'dashboard') initDashboard();
+
+  // Otomatis jalankan pemantauan IoT di background jika berada di tab IoT
+  if (tabId === 'iot') {
+    if (!autoSyncInterval) {
+      autoSyncInterval = setInterval(silentRefreshIoT, 5000);
+      silentRefreshIoT();
+    }
+  } else {
+    if (autoSyncInterval) {
+      clearInterval(autoSyncInterval);
+      autoSyncInterval = null;
+    }
+  }
 }
 
 function toggleTheme() {
@@ -750,6 +767,7 @@ function renderTable() {
           <td>${item['Logo SKEM'] || '-'}</td>
           <td>${item['Barcode BMN (NUP)'] || '-'}</td>
           <td>${item.Keterangan || '-'}</td>
+          <td>${item['Device ID IoT'] || '-'}</td>
           <td class="actions-cell">
             <button class="btn-icon btn-action-edit" onclick="editData('${item.No}')" title="Edit"><i data-lucide="edit"></i></button>
             <button class="btn-icon btn-action-delete" onclick="deleteData('${item.No}')" title="Hapus"><i data-lucide="trash-2"></i></button>
@@ -810,6 +828,7 @@ function saveData(event) {
     "Logo SKEM": document.getElementById('inputSKEM').value,
     "Barcode BMN (NUP)": document.getElementById('inputBarcode').value,
     Keterangan: document.getElementById('inputKeterangan').value,
+    "Device ID IoT": document.getElementById('inputDeviceId').value
   };
 
   if (idToEdit) {
@@ -856,6 +875,7 @@ function editData(id) {
     document.getElementById('inputSKEM').value = item['Logo SKEM'] || '';
     document.getElementById('inputBarcode').value = item['Barcode BMN (NUP)'] || '';
     document.getElementById('inputKeterangan').value = item.Keterangan || '';
+    document.getElementById('inputDeviceId').value = item['Device ID IoT'] || '';
     openModal();
   }
 }
@@ -1068,6 +1088,129 @@ function renderLogTable(type) {
           <button class="btn-icon btn-action-edit" onclick="editLog('${item.id_usulan}', 'usul-hapus')" title="Edit"><i data-lucide="edit"></i></button>
           <button class="btn-icon btn-action-delete" onclick="deleteLog('${item.id_usulan}', 'usul-hapus')" title="Hapus"><i data-lucide="trash-2"></i></button>
         </td>
+      </tr>`);
+    });
+
+  } else if (type === 'iot') {
+    const filterTglStart = document.getElementById('filterTglStartIot')?.value;
+    const filterTglEnd = document.getElementById('filterTglEndIot')?.value;
+
+    const dataToRender = logPemakaian.filter(item => {
+      const vals = Object.values(item);
+      const matchSearch = vals.some(val => String(val || '').toLowerCase().includes(filterQ));
+      
+      let matchTgl = true;
+      if (filterTglStart || filterTglEnd) {
+        const tglValue = vals.length > 0 ? vals[0] : null;
+        const itemDateStr = formatDateForInput(tglValue);
+        if (!itemDateStr) {
+          matchTgl = false;
+        } else {
+          if (filterTglStart && itemDateStr < filterTglStart) matchTgl = false;
+          if (filterTglEnd && itemDateStr > filterTglEnd) matchTgl = false;
+        }
+      }
+      return matchSearch && matchTgl;
+    });
+
+    // Ambil hanya data terbaru per Device ID
+    const latestDataMap = new Map();
+    dataToRender.forEach(item => {
+      const vals = Object.values(item);
+      const deviceIdText = vals[1] || '-';
+      latestDataMap.set(deviceIdText, item);
+    });
+    const uniqueDataToRender = Array.from(latestDataMap.values());
+    
+    filteredLogPemakaian = uniqueDataToRender;
+
+    uniqueDataToRender.forEach(item => {
+      const vals = Object.values(item);
+      const waktuText = vals[0] ? new Date(vals[0]).toLocaleString('id-ID') : '-';
+      const deviceIdText = vals[1] || '-';
+      const statusText = vals[2] || '-';
+      
+      const acInfo = acData.find(x => x['Device ID IoT'] === deviceIdText || (x.Keterangan && x.Keterangan.includes(deviceIdText)));
+      const noSeriText = acInfo ? (acInfo['No. Seri Indoor'] || '-') : '-';
+      const lokasiText = acInfo ? `${acInfo.Gedung || '-'} / ${acInfo.Lokasi || '-'}` : '-';
+      
+      let badgeClass = 'badge';
+      let isOn = false;
+      if (String(statusText).toUpperCase() === 'ON' || String(statusText) === 'true') { badgeClass += ' badge-success'; isOn = true; }
+      if (String(statusText).toUpperCase() === 'OFF' || String(statusText) === 'false') { badgeClass += ' badge-danger'; isOn = false; }
+      
+      // Kalkulasi Durasi Pemakaian (Total Akumulasi)
+      let durationText = '-';
+      if (deviceIdText && deviceIdText !== '-') {
+        // Ambil riwayat khusus device ini, perhatikan bahwa logPemakaian sudah difilter berdasarkan tanggal di UI
+        const deviceHistory = logPemakaian.filter(row => Object.values(row)[1] === deviceIdText);
+        
+        const formatDuration = (ms) => {
+          if (ms <= 0) return '0 mnt';
+          const seconds = Math.floor(ms / 1000);
+          const m = Math.floor(seconds / 60) % 60;
+          const h = Math.floor(seconds / 3600);
+          return h > 0 ? `${h} jam ${m} mnt` : `${m} mnt`;
+        };
+        
+        let totalMs = 0;
+        let currentBlockStart = null;
+        
+        for (let i = 0; i < deviceHistory.length; i++) {
+          const hVals = Object.values(deviceHistory[i]);
+          const hTime = new Date(hVals[0]).getTime();
+          const hStatus = String(hVals[2]).toUpperCase();
+          const isThisOn = (hStatus === 'ON' || hStatus === 'TRUE');
+        
+          if (isThisOn) {
+            if (currentBlockStart === null) {
+              currentBlockStart = hTime; // Catat waktu mulai nyala
+            }
+          } else {
+            if (currentBlockStart !== null) {
+              totalMs += (hTime - currentBlockStart); // Tambahkan selisih waktu ke total
+              currentBlockStart = null;
+            }
+          }
+        }
+        
+        // Jika saat ini masih menyala, tambahkan durasi yang sedang berjalan hingga detik ini
+        if (currentBlockStart !== null) {
+          totalMs += (new Date().getTime() - currentBlockStart);
+          durationText = `<span style="color:#eab308; font-weight:bold;">${formatDuration(totalMs)}</span> <br><small style="color:#22c55e;">(Sedang Berjalan)</small>`;
+        } else {
+          durationText = `<span style="color:#eab308; font-weight:bold;">${formatDuration(totalMs)}</span> <br><small>(Total Filter)</small>`;
+        }
+      }
+
+      let actionBtn = '-';
+      if (deviceIdText && deviceIdText !== '-') {
+        const btnOnStyle = isOn ? "opacity: 0.5; cursor: not-allowed; background-color:#22c55e; color:white;" : "background-color:#22c55e; border-color:#22c55e; color:white;";
+        const btnOffStyle = !isOn ? "opacity: 0.5; cursor: not-allowed; background-color:#ef4444; color:white;" : "background-color:#ef4444; border-color:#ef4444; color:white;";
+        
+        actionBtn = `
+          <div style="display: flex; flex-direction: row; gap: 4px; flex-wrap: nowrap; min-width: 130px;">
+            <button class="btn btn-secondary" onclick="toggleAc('${deviceIdText}', true)" style="flex: 1; padding: 4px 6px; font-size: 11px; display: flex; justify-content: center; align-items: center; gap: 2px; ${btnOnStyle}" ${isOn ? 'disabled' : ''}><i data-lucide="power" style="width: 14px; height: 14px;"></i> ON</button>
+            <button class="btn btn-secondary" onclick="toggleAc('${deviceIdText}', false)" style="flex: 1; padding: 4px 6px; font-size: 11px; display: flex; justify-content: center; align-items: center; gap: 2px; ${btnOffStyle}" ${!isOn ? 'disabled' : ''}><i data-lucide="power" style="width: 14px; height: 14px;"></i> OFF</button>
+          </div>
+        `;
+      }
+
+      // Desain indikator lampu
+      const lightbulbIcon = isOn 
+        ? `<i data-lucide="lightbulb" style="color: #22c55e; fill: #22c55e; width: 16px; height: 16px; margin-right: 4px;"></i>` 
+        : `<i data-lucide="lightbulb" style="color: #ef4444; fill: #ef4444; width: 16px; height: 16px; margin-right: 4px;"></i>`;
+      
+      const statusHtml = `<div style="display: flex; align-items: center;">${lightbulbIcon} <span class="${badgeClass}">${statusText === 'true' ? 'ON' : (statusText === 'false' ? 'OFF' : statusText)}</span></div>`;
+      
+      tbody.insertAdjacentHTML('beforeend', `<tr>
+        <td>${waktuText}</td>
+        <td>${deviceIdText}</td>
+        <td>${noSeriText}</td>
+        <td>${lokasiText}</td>
+        <td>${statusHtml}</td>
+        <td>${durationText}</td>
+        <td>${actionBtn}</td>
       </tr>`);
     });
   }
@@ -1449,7 +1592,8 @@ function downloadExcel(type) {
       "TAHUN": item.Tahun || '-',
       "LOGO SKEM": item['Logo SKEM'] || '-',
       "BARCODE BMN (NUP)": item['Barcode BMN (NUP)'] || '-',
-      "KETERANGAN": item.Keterangan || '-'
+      "KETERANGAN": item.Keterangan || '-',
+      "Device ID IoT": item['Device ID IoT'] || '-'
     }));
     filename = 'Data_AC_Utama.xlsx';
   } else if (type === 'pemeliharaan') {
@@ -1496,6 +1640,19 @@ function downloadExcel(type) {
       "STATUS SISTEM": item.status_sistem || '-'
     }));
     filename = 'Log_Usul_Hapus.xlsx';
+  } else if (type === 'iot') {
+    dataToExport = filteredLogPemakaian.map(item => {
+      const vals = Object.values(item);
+      const acInfo = acData.find(x => x['Device ID IoT'] === vals[1] || (x.Keterangan && x.Keterangan.includes(vals[1])));
+      return {
+        "WAKTU CEK": vals[0] ? new Date(vals[0]).toLocaleString('id-ID') : '-',
+        "DEVICE ID": vals[1] || '-',
+        "NO SERI INDOOR": acInfo ? (acInfo['No. Seri Indoor'] || '-') : '-',
+        "LOKASI / RUANGAN": acInfo ? `${acInfo.Gedung || '-'} / ${acInfo.Lokasi || '-'}` : '-',
+        "STATUS AC": vals[2] || '-'
+      };
+    });
+    filename = 'Log_Pemakaian_IoT.xlsx';
   }
 
   if (!dataToExport || dataToExport.length === 0) {
@@ -1618,5 +1775,150 @@ function validateSeriRealtime(inputId, statusId) {
     lucide.createIcons();
   }
 }
+
+async function refreshIoT() {
+  const btn = document.querySelector('[onclick="refreshIoT()"]');
+  const icon = btn ? btn.querySelector('i') : null;
+  if (icon) icon.classList.add('spin');
+  if (btn) btn.disabled = true;
+  
+  try {
+    const targetId = getTargetSpreadsheetId();
+    if (!targetId) throw new Error("No target ID");
+    
+    // 1. Minta backend untuk sinkronisasi dengan server Tuya
+    const acDeviceIds = acData.map(x => x['Device ID IoT']).filter(id => id && id !== '-');
+    const logDeviceIds = [...new Set(logPemakaian.map(x => Object.values(x)[1]).filter(id => id && id !== '-'))];
+    const deviceIds = [...new Set([...acDeviceIds, ...logDeviceIds])];
+    
+    if (deviceIds.length > 0) {
+      if (btn) btn.innerHTML = `<i data-lucide="loader" class="spin"></i> Sync Tuya...`;
+      
+      // Pecah menjadi kelompok 50 untuk mencegah URL kepanjangan
+      const chunkSize = 50;
+      for (let i = 0; i < deviceIds.length; i += chunkSize) {
+        const chunk = deviceIds.slice(i, i + chunkSize);
+        await fetch(`${WEB_APP_URL}?action=sync_tuya&deviceIds=${chunk.join(',')}`);
+      }
+      
+      // Beri waktu sebentar agar backend selesai update sheet sebelum kita tarik data terbaru
+      await new Promise(r => setTimeout(r, 1500));
+    }
+    
+    if (btn) btn.innerHTML = `<i data-lucide="loader" class="spin"></i> Memuat Data...`;
+    
+    // 2. Tarik log terbaru dari Google Sheets
+    const response = await fetch(`${WEB_APP_URL}?id=${targetId}`);
+    if (!response.ok) throw new Error('Network response was not ok');
+    const dbData = await response.json();
+    
+    if (!dbData.error) {
+      logPemakaian = dbData.logPemakaian || [];
+      renderLogTable('iot');
+    }
+  } catch(e) {
+    console.error(e);
+    alert("Gagal memuat ulang data IoT");
+  } finally {
+    if (btn) {
+      btn.innerHTML = `<i data-lucide="refresh-cw"></i> Refresh Manual`;
+      btn.disabled = false;
+      lucide.createIcons();
+    }
+  }
+}
+
+let autoSyncInterval = null;
+let isAutoSyncing = false;
+
+async function silentRefreshIoT() {
+  if (isAutoSyncing) return; // Mencegah tabrakan request jika koneksi lambat
+  isAutoSyncing = true;
+  try {
+    const targetId = getTargetSpreadsheetId();
+    if (!targetId) throw new Error("No target ID");
+    
+    const acDeviceIds = acData.map(x => x['Device ID IoT']).filter(id => id && id !== '-');
+    const logDeviceIds = [...new Set(logPemakaian.map(x => Object.values(x)[1]).filter(id => id && id !== '-'))];
+    const deviceIds = [...new Set([...acDeviceIds, ...logDeviceIds])];
+    if (deviceIds.length > 0) {
+      // Pecah menjadi kelompok 50
+      const chunkSize = 50;
+      for (let i = 0; i < deviceIds.length; i += chunkSize) {
+        const chunk = deviceIds.slice(i, i + chunkSize);
+        await fetch(`${WEB_APP_URL}?action=sync_tuya&deviceIds=${chunk.join(',')}`);
+      }
+      // Beri waktu sebentar agar backend selesai update sheet sebelum kita get
+      await new Promise(r => setTimeout(r, 1500));
+    }
+    
+    const response = await fetch(`${WEB_APP_URL}?id=${targetId}`);
+    if (!response.ok) throw new Error('Network response was not ok');
+    const dbData = await response.json();
+    
+    if (!dbData.error) {
+      logPemakaian = dbData.logPemakaian || [];
+      renderLogTable('iot');
+    }
+  } catch(e) {
+    console.error("Auto-sync error:", e);
+  } finally {
+    isAutoSyncing = false;
+  }
+}
+
+async function toggleAc(deviceId, turnOn) {
+  const confirmMsg = turnOn ? "Nyalakan AC ini?" : "Matikan AC ini?";
+  if (!confirm(confirmMsg)) return;
+
+  try {
+    const targetId = getTargetSpreadsheetId();
+    if (!targetId) throw new Error("No target ID");
+
+    // Cari baris tombol dan tunjukkan loading state
+    const tbody = document.getElementById('tableBodyIot');
+    if (tbody) {
+      const rows = tbody.querySelectorAll('tr');
+      rows.forEach(row => {
+        if (row.innerHTML.includes(`'${deviceId}'`)) {
+          const btns = row.querySelectorAll('td:last-child button');
+          btns.forEach(btn => {
+            if (turnOn && btn.innerText.includes("ON")) {
+              btn.innerHTML = `<i data-lucide="loader" class="spin"></i> Proses...`;
+            } else if (!turnOn && btn.innerText.includes("OFF")) {
+              btn.innerHTML = `<i data-lucide="loader" class="spin"></i> Proses...`;
+            }
+            btn.disabled = true;
+          });
+        }
+      });
+      lucide.createIcons();
+    }
+
+    const payload = { 
+      action: 'toggle_ac',
+      deviceId: deviceId,
+      turnOn: turnOn
+    };
+
+    const response = await fetch(WEB_APP_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ targetSpreadsheetId: targetId, payload: payload })
+    });
+    
+    // Karena no-cors, kita anggap sukses, tunggu 2 detik agar status API Tuya terupdate, lalu refresh.
+    setTimeout(() => {
+      refreshIoT();
+    }, 2000);
+
+  } catch (e) {
+    console.error(e);
+    alert("Gagal mengirim perintah ke alat IoT.");
+    refreshIoT();
+  }
+}
+
 
 
