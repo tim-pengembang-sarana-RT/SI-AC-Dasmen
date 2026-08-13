@@ -15,7 +15,7 @@ let filteredLogMutasi = [];
 let filteredLogUsulHapus = [];
 let filteredLogPemakaian = [];
 
-const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzHzRiqXUyifctP7DkmhluWuYn30DA3ziWlDQq5Zz7SiAEmz388wIYzfvZKtYTHlq4e/exec";
+const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxQIo3Dj54MMMt5XAIfdS96hFLS2tk6DPh1H6PKj77hAFcaaJrvJ3_DpFDaZupBa55a/exec";
 
 // --- PENGATURAN DATABASE ---
 function extractSpreadsheetId(urlOrId) {
@@ -152,6 +152,18 @@ async function initState() {
 
     if (dbData.error) {
       alert("Error dari Server: " + dbData.error + "\n\nPastikan URL Spreadsheet di Pengaturan Database sudah benar.");
+      
+      // TAMPILKAN KEMBALI TOMBOL HUBUNGKAN DATABASE AGAR USER BISA MENGGANTI LINK JIKA SALAH
+      document.getElementById('loginUserGroup')?.classList.add('hidden');
+      document.getElementById('loginPassGroup')?.classList.add('hidden');
+      document.getElementById('btnLoginBtn')?.classList.add('hidden');
+      document.getElementById('btnConnectDbLogin')?.classList.remove('hidden');
+      const loginInitMsg = document.getElementById('loginInitMsg');
+      if (loginInitMsg) {
+        loginInitMsg.innerText = "Error dari Database. Silakan periksa URL Anda.";
+        loginInitMsg.style.color = "var(--danger-color)";
+      }
+      
       acData = []; logPemeliharaan = []; logMutasi = []; logUsulHapus = [];
       return;
     }
@@ -229,7 +241,19 @@ async function initState() {
 
   } catch(e) {
     console.error("Gagal memuat database dari server Google:", e);
-    alert("Gagal mengunduh data dari Google Sheets! Pastikan Anda memiliki koneksi internet dan URL Google Web App sudah benar.");
+    
+    // TAMPILKAN KEMBALI TOMBOL HUBUNGKAN DATABASE AGAR USER BISA MENGGANTI LINK JIKA SALAH
+    document.getElementById('loginUserGroup')?.classList.add('hidden');
+    document.getElementById('loginPassGroup')?.classList.add('hidden');
+    document.getElementById('btnLoginBtn')?.classList.add('hidden');
+    document.getElementById('btnConnectDbLogin')?.classList.remove('hidden');
+    const loginInitMsg = document.getElementById('loginInitMsg');
+    if (loginInitMsg) {
+      loginInitMsg.innerText = "Koneksi gagal. Silakan periksa URL Database.";
+      loginInitMsg.style.color = "var(--danger-color)";
+    }
+    
+    alert("Gagal mengunduh data dari Google Sheets! Pastikan Anda memiliki koneksi internet dan URL Spreadsheet (Database) sudah benar.");
   }
 }
 
@@ -390,11 +414,13 @@ function switchTab(tabId) {
     'pemeliharaan': 'Log Pemeliharaan',
     'mutasi': 'Log Mutasi AC',
     'usul-hapus': 'Log Usul Penghapusan',
-    'iot': 'Log Pemakaian (IoT)'
+    'iot': 'Log Pemakaian (IoT)',
+    'rekap': 'Rekap Pemakaian & Biaya AC'
   };
-  document.getElementById('page-title').innerText = titles[tabId];
+  document.getElementById('page-title').innerText = titles[tabId] || 'SI-AC Dasmen';
 
   if (tabId === 'dashboard') initDashboard();
+  if (tabId === 'rekap') initRekapPemakaian();
 
   // Otomatis jalankan pemantauan IoT di background jika berada di tab IoT
   if (tabId === 'iot') {
@@ -582,6 +608,7 @@ function updateFormDatalists() {
   const lokasiSet = new Set();
   const merkSet = new Set();
   const barcodeSet = new Set();
+  const jenisSet = new Set(['Split', 'Cassette', 'Standing', 'Ceiling', 'Floor Standing', 'Window', 'Portable']);
   
   const allLokasiSet = new Set();
   const allMerkSet = new Set();
@@ -590,6 +617,7 @@ function updateFormDatalists() {
     if (item.Gedung) gedungSet.add(item.Gedung);
     if (item.Lokasi) allLokasiSet.add(item.Lokasi);
     if (item.Merk) allMerkSet.add(item.Merk);
+    if (item.Jenis && String(item.Jenis).trim()) jenisSet.add(String(item.Jenis).trim());
     if (item['Barcode BMN (NUP)']) {
       const val = String(item['Barcode BMN (NUP)']);
       if (!/\d/.test(val)) {
@@ -621,6 +649,7 @@ function updateFormDatalists() {
   populateDatalist('datalistLokasi', finalLokasiSet);
   populateDatalist('datalistMerk', finalMerkSet);
   populateDatalist('datalistBarcode', barcodeSet);
+  populateDatalist('datalistJenis', jenisSet);
 }
 
 // --- LOG MUTASI DATALIST LOGIC ---
@@ -1125,12 +1154,11 @@ function renderLogTable(type) {
     filteredLogPemakaian = uniqueDataToRender;
 
     uniqueDataToRender.forEach(item => {
-      const vals = Object.values(item);
-      const waktuText = vals[0] ? new Date(vals[0]).toLocaleString('id-ID') : '-';
-      const deviceIdText = vals[1] || '-';
-      const statusText = vals[2] || '-';
+      const waktuText = item.tanggal ? new Date(item.tanggal).toLocaleString('id-ID') : '-';
+      const deviceIdText = item.id_iot || '-';
+      const statusText = item.status_terakhir || '-';
       
-      const acInfo = acData.find(x => x['Device ID IoT'] === deviceIdText || (x.Keterangan && x.Keterangan.includes(deviceIdText)));
+      const acInfo = acData.find(x => x['Device ID (IoT)'] === deviceIdText || x['Device ID IoT'] === deviceIdText || x['id_iot'] === deviceIdText || (x.Keterangan && x.Keterangan.includes(deviceIdText)));
       const noSeriText = acInfo ? (acInfo['No. Seri Indoor'] || '-') : '-';
       const lokasiText = acInfo ? `${acInfo.Gedung || '-'} / ${acInfo.Lokasi || '-'}` : '-';
       
@@ -1185,13 +1213,20 @@ function renderLogTable(type) {
 
       let actionBtn = '-';
       if (deviceIdText && deviceIdText !== '-') {
-        const btnOnStyle = isOn ? "opacity: 0.5; cursor: not-allowed; background-color:#22c55e; color:white;" : "background-color:#22c55e; border-color:#22c55e; color:white;";
-        const btnOffStyle = !isOn ? "opacity: 0.5; cursor: not-allowed; background-color:#ef4444; color:white;" : "background-color:#ef4444; border-color:#ef4444; color:white;";
+        // Tombol aktif hanya kebalikan dari status saat ini
+        // Status ON  → tombol OFF aktif, tombol ON disabled
+        // Status OFF → tombol ON aktif, tombol OFF disabled
+        const btnOnStyle = isOn 
+          ? "background-color:#22c55e; color:white; opacity:0.4; cursor:not-allowed;"
+          : "background-color:#22c55e; border-color:#22c55e; color:white;";
+        const btnOffStyle = !isOn 
+          ? "background-color:#ef4444; color:white; opacity:0.4; cursor:not-allowed;"
+          : "background-color:#ef4444; border-color:#ef4444; color:white;";
         
         actionBtn = `
           <div style="display: flex; flex-direction: row; gap: 4px; flex-wrap: nowrap; min-width: 130px;">
-            <button class="btn btn-secondary" onclick="toggleAc('${deviceIdText}', true)" style="flex: 1; padding: 4px 6px; font-size: 11px; display: flex; justify-content: center; align-items: center; gap: 2px; ${btnOnStyle}" ${isOn ? 'disabled' : ''}><i data-lucide="power" style="width: 14px; height: 14px;"></i> ON</button>
-            <button class="btn btn-secondary" onclick="toggleAc('${deviceIdText}', false)" style="flex: 1; padding: 4px 6px; font-size: 11px; display: flex; justify-content: center; align-items: center; gap: 2px; ${btnOffStyle}" ${!isOn ? 'disabled' : ''}><i data-lucide="power" style="width: 14px; height: 14px;"></i> OFF</button>
+            <button class="btn btn-secondary" ${isOn ? 'disabled' : `onclick="toggleAc('${deviceIdText}', true)"`} style="flex: 1; padding: 4px 6px; font-size: 11px; display: flex; justify-content: center; align-items: center; gap: 2px; ${btnOnStyle}"><i data-lucide="power" style="width: 14px; height: 14px;"></i> ON</button>
+            <button class="btn btn-secondary" ${!isOn ? 'disabled' : `onclick="toggleAc('${deviceIdText}', false)"`} style="flex: 1; padding: 4px 6px; font-size: 11px; display: flex; justify-content: center; align-items: center; gap: 2px; ${btnOffStyle}"><i data-lucide="power" style="width: 14px; height: 14px;"></i> OFF</button>
           </div>
         `;
       }
@@ -1643,7 +1678,7 @@ function downloadExcel(type) {
   } else if (type === 'iot') {
     dataToExport = filteredLogPemakaian.map(item => {
       const vals = Object.values(item);
-      const acInfo = acData.find(x => x['Device ID IoT'] === vals[1] || (x.Keterangan && x.Keterangan.includes(vals[1])));
+      const acInfo = acData.find(x => x['Device ID (IoT)'] === vals[1] || x['Device ID IoT'] === vals[1] || x['id_iot'] === vals[1] || (x.Keterangan && x.Keterangan.includes(vals[1])));
       return {
         "WAKTU CEK": vals[0] ? new Date(vals[0]).toLocaleString('id-ID') : '-',
         "DEVICE ID": vals[1] || '-',
@@ -1653,6 +1688,20 @@ function downloadExcel(type) {
       };
     });
     filename = 'Log_Pemakaian_IoT.xlsx';
+  } else if (type === 'rekap') {
+    dataToExport = (filteredRekapData || []).map((item, index) => ({
+      "NO": index + 1,
+      "NO SERI INDOOR": item.noSeri,
+      "DEVICE ID": item.devId,
+      "GEDUNG": item.gedung,
+      "LOKASI / RUANGAN": item.lokasi,
+      "DAYA AC (WATT)": item.watt,
+      "TOTAL JAM NYALA": parseFloat(item.durationHours.toFixed(1)),
+      "ESTIMASI KWH": parseFloat(item.kwh.toFixed(2)),
+      "ESTIMASI BIAYA (RP)": Math.round(item.biaya),
+      "STATUS SAAT INI": item.status
+    }));
+    filename = 'Rekap_Pemakaian_AC.xlsx';
   }
 
   if (!dataToExport || dataToExport.length === 0) {
@@ -1787,9 +1836,12 @@ async function refreshIoT() {
     if (!targetId) throw new Error("No target ID");
     
     // 1. Minta backend untuk sinkronisasi dengan server Tuya
-    const acDeviceIds = acData.map(x => x['Device ID IoT']).filter(id => id && id !== '-');
-    const logDeviceIds = [...new Set(logPemakaian.map(x => Object.values(x)[1]).filter(id => id && id !== '-'))];
-    const deviceIds = [...new Set([...acDeviceIds, ...logDeviceIds])];
+    // 1. Perintahkan backend untuk sinkronisasi dengan Tuya
+    let deviceIdsFromAc = acData.map(item => item['Device ID (IoT)'] || item['Device ID IoT'] || item.id_iot);
+    let deviceIdsFromLog = logPemakaian.map(item => item.id_iot);
+    let allDeviceIds = deviceIdsFromAc.concat(deviceIdsFromLog);
+    
+    const deviceIds = [...new Set(allDeviceIds.filter(id => id && id !== '-' && String(id).trim() !== ''))];
     
     if (deviceIds.length > 0) {
       if (btn) btn.innerHTML = `<i data-lucide="loader" class="spin"></i> Sync Tuya...`;
@@ -1798,7 +1850,7 @@ async function refreshIoT() {
       const chunkSize = 50;
       for (let i = 0; i < deviceIds.length; i += chunkSize) {
         const chunk = deviceIds.slice(i, i + chunkSize);
-        await fetch(`${WEB_APP_URL}?action=sync_tuya&deviceIds=${chunk.join(',')}`);
+        await fetch(`${WEB_APP_URL}?action=sync_tuya&deviceIds=${chunk.join(',')}&id=${targetId}`);
       }
       
       // Beri waktu sebentar agar backend selesai update sheet sebelum kita tarik data terbaru
@@ -1818,7 +1870,7 @@ async function refreshIoT() {
     }
   } catch(e) {
     console.error(e);
-    alert("Gagal memuat ulang data IoT");
+    alert("Gagal memuat ulang data IoT. Error: " + e.message);
   } finally {
     if (btn) {
       btn.innerHTML = `<i data-lucide="refresh-cw"></i> Refresh Manual`;
@@ -1846,7 +1898,7 @@ async function silentRefreshIoT() {
       const chunkSize = 50;
       for (let i = 0; i < deviceIds.length; i += chunkSize) {
         const chunk = deviceIds.slice(i, i + chunkSize);
-        await fetch(`${WEB_APP_URL}?action=sync_tuya&deviceIds=${chunk.join(',')}`);
+        await fetch(`${WEB_APP_URL}?action=sync_tuya&deviceIds=${chunk.join(',')}&id=${targetId}`);
       }
       // Beri waktu sebentar agar backend selesai update sheet sebelum kita get
       await new Promise(r => setTimeout(r, 1500));
@@ -1917,6 +1969,303 @@ async function toggleAc(deviceId, turnOn) {
     console.error(e);
     alert("Gagal mengirim perintah ke alat IoT.");
     refreshIoT();
+  }
+}
+
+// =========================================================================
+// REKAP PEMAKAIAN & BIAYA LISTRIK AC
+// =========================================================================
+let chartRekapGedung = null;
+let chartRekapTopAc = null;
+let filteredRekapData = [];
+
+function initRekapPemakaian() {
+  const gedungSelect = document.getElementById('filterGedungRekap');
+  if (gedungSelect) {
+    const currentVal = gedungSelect.value;
+    const gedungs = [...new Set(acData.map(item => item.Gedung).filter(g => g && g !== '-'))].sort();
+    gedungSelect.innerHTML = '<option value="">Semua Gedung</option>' + gedungs.map(g => `<option value="${g}">${g}</option>`).join('');
+    gedungSelect.value = currentVal;
+  }
+  handlePeriodeRekapChange();
+}
+
+function handlePeriodeRekapChange() {
+  const periode = document.getElementById('filterPeriodeRekap')?.value || 'bulan_ini';
+  const customGroup = document.getElementById('groupCustomDateRekap');
+  const startInput = document.getElementById('filterTglStartRekap');
+  const endInput = document.getElementById('filterTglEndRekap');
+
+  const now = new Date();
+  if (periode === 'bulan_ini') {
+    if (customGroup) customGroup.style.display = 'none';
+    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    if (startInput) startInput.value = firstDay.toISOString().split('T')[0];
+    if (endInput) endInput.value = lastDay.toISOString().split('T')[0];
+  } else if (periode === 'bulan_lalu') {
+    if (customGroup) customGroup.style.display = 'none';
+    const firstDay = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastDay = new Date(now.getFullYear(), now.getMonth(), 0);
+    if (startInput) startInput.value = firstDay.toISOString().split('T')[0];
+    if (endInput) endInput.value = lastDay.toISOString().split('T')[0];
+  } else if (periode === 'tahun_ini') {
+    if (customGroup) customGroup.style.display = 'none';
+    const firstDay = new Date(now.getFullYear(), 0, 1);
+    const lastDay = new Date(now.getFullYear(), 11, 31);
+    if (startInput) startInput.value = firstDay.toISOString().split('T')[0];
+    if (endInput) endInput.value = lastDay.toISOString().split('T')[0];
+  } else if (periode === 'semua') {
+    if (customGroup) customGroup.style.display = 'none';
+    if (startInput) startInput.value = '';
+    if (endInput) endInput.value = '';
+  } else if (periode === 'custom') {
+    if (customGroup) customGroup.style.display = 'flex';
+  }
+
+  renderRekapPemakaian();
+}
+
+function renderRekapPemakaian() {
+  const startDateStr = document.getElementById('filterTglStartRekap')?.value || '';
+  const endDateStr = document.getElementById('filterTglEndRekap')?.value || '';
+  const selectedGedung = document.getElementById('filterGedungRekap')?.value || '';
+  const tarifPln = parseFloat(document.getElementById('inputTarifPln')?.value || 1444);
+  const defaultWatt = parseFloat(document.getElementById('inputDefaultWatt')?.value || 900);
+
+  const startMs = startDateStr ? new Date(startDateStr + 'T00:00:00').getTime() : 0;
+  const endMs = endDateStr ? new Date(endDateStr + 'T23:59:59').getTime() : Infinity;
+
+  // Group logPemakaian entries per device ID
+  const deviceHistoryMap = new Map();
+  logPemakaian.forEach(row => {
+    const vals = Object.values(row);
+    const timeMs = new Date(vals[0]).getTime();
+    const devId = String(vals[1] || '').trim();
+    const status = String(vals[2] || '').toUpperCase();
+    if (!devId || devId === '-') return;
+
+    if (!deviceHistoryMap.has(devId)) {
+      deviceHistoryMap.set(devId, []);
+    }
+    deviceHistoryMap.get(devId).push({ timeMs, status, raw: row });
+  });
+
+  // Unique devices from acData + deviceHistoryMap
+  const allDevIds = new Set([
+    ...Array.from(deviceHistoryMap.keys()),
+    ...acData.map(item => item['Device ID (IoT)'] || item['Device ID IoT'] || item['id_iot']).filter(id => id && id !== '-')
+  ]);
+
+  const rekapRows = [];
+
+  allDevIds.forEach(devId => {
+    const acInfo = acData.find(x => x['Device ID (IoT)'] === devId || x['Device ID IoT'] === devId || x['id_iot'] === devId || (x.Keterangan && x.Keterangan.includes(devId)));
+
+    const noSeri = acInfo ? (acInfo['No. Seri Indoor'] || '-') : '-';
+    const gedung = acInfo ? (acInfo.Gedung || '-') : '-';
+    const lokasi = acInfo ? (acInfo.Lokasi || '-') : '-';
+
+    // Filter Gedung
+    if (selectedGedung && gedung !== selectedGedung) return;
+
+    // Calculate Daya Watt
+    let watt = 0;
+    if (acInfo) {
+      const dOut = parseFloat(String(acInfo['Daya Outdoor'] || '').replace(/[^0-9.]/g, '')) || 0;
+      const dIn = parseFloat(String(acInfo['Daya Indoor'] || '').replace(/[^0-9.]/g, '')) || 0;
+      if (dOut > 0 || dIn > 0) {
+        watt = dOut + dIn;
+      } else if (acInfo.PK) {
+        const pkStr = String(acInfo.PK).replace(',', '.').replace(/[^0-9.]/g, '');
+        const pkVal = parseFloat(pkStr);
+        if (!isNaN(pkVal) && pkVal > 0) {
+          if (pkVal <= 0.6) watt = 400;
+          else if (pkVal <= 0.8) watt = 600;
+          else if (pkVal <= 1.2) watt = 900;
+          else if (pkVal <= 1.7) watt = 1300;
+          else if (pkVal <= 2.2) watt = 1800;
+          else if (pkVal <= 2.7) watt = 2200;
+          else watt = pkVal * 900;
+        }
+      }
+    }
+    if (watt <= 0) watt = defaultWatt;
+
+    // Calculate duration (ms) within date range
+    const history = deviceHistoryMap.get(devId) || [];
+    history.sort((a, b) => a.timeMs - b.timeMs);
+
+    let totalMs = 0;
+    let currentBlockStart = null;
+    let lastStatusStr = '-';
+
+    for (let i = 0; i < history.length; i++) {
+      const h = history[i];
+      lastStatusStr = (h.status === 'ON' || h.status === 'TRUE') ? 'ON' : 'OFF';
+      const isThisOn = (lastStatusStr === 'ON');
+
+      if (isThisOn) {
+        if (currentBlockStart === null) {
+          currentBlockStart = h.timeMs;
+        }
+      } else {
+        if (currentBlockStart !== null) {
+          const intervalStart = Math.max(currentBlockStart, startMs);
+          const intervalEnd = Math.min(h.timeMs, endMs);
+          if (intervalEnd > intervalStart) {
+            totalMs += (intervalEnd - intervalStart);
+          }
+          currentBlockStart = null;
+        }
+      }
+    }
+
+    if (currentBlockStart !== null) {
+      const nowMs = Date.now();
+      const intervalStart = Math.max(currentBlockStart, startMs);
+      const intervalEnd = Math.min(nowMs, endMs);
+      if (intervalEnd > intervalStart) {
+        totalMs += (intervalEnd - intervalStart);
+      }
+    }
+
+    const durationHours = totalMs / (1000 * 3600);
+    const kwh = (durationHours * watt) / 1000;
+    const biaya = kwh * tarifPln;
+
+    rekapRows.push({
+      devId,
+      noSeri,
+      gedung,
+      lokasi,
+      watt,
+      durationHours,
+      kwh,
+      biaya,
+      status: lastStatusStr
+    });
+  });
+
+  filteredRekapData = rekapRows;
+
+  // Update Summary Cards
+  const grandTotalHours = rekapRows.reduce((sum, r) => sum + r.durationHours, 0);
+  const grandTotalKwh = rekapRows.reduce((sum, r) => sum + r.kwh, 0);
+  const grandTotalBiaya = rekapRows.reduce((sum, r) => sum + r.biaya, 0);
+  const activeUnits = rekapRows.filter(r => r.durationHours > 0 || r.status === 'ON').length;
+
+  const elTotalJam = document.getElementById('rekap-total-jam');
+  const elTotalKwh = document.getElementById('rekap-total-kwh');
+  const elTotalBiaya = document.getElementById('rekap-total-biaya');
+  const elTotalUnit = document.getElementById('rekap-total-unit');
+
+  if (elTotalJam) elTotalJam.innerText = `${grandTotalHours.toFixed(1)} Jam`;
+  if (elTotalKwh) elTotalKwh.innerText = `${grandTotalKwh.toFixed(2)} kWh`;
+  if (elTotalBiaya) elTotalBiaya.innerText = `Rp ${Math.round(grandTotalBiaya).toLocaleString('id-ID')}`;
+  if (elTotalUnit) elTotalUnit.innerText = `${activeUnits} Unit`;
+
+  // Render Table
+  const tbody = document.getElementById('tableBodyRekap');
+  if (tbody) {
+    if (rekapRows.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="10" style="text-align:center; padding: 20px;">Tidak ada data rekap untuk periode ini.</td></tr>`;
+    } else {
+      tbody.innerHTML = rekapRows.map((r, index) => {
+        const badgeClass = r.status === 'ON' ? 'badge badge-success' : 'badge badge-danger';
+        return `
+          <tr>
+            <td>${index + 1}</td>
+            <td>${r.noSeri}</td>
+            <td style="font-family: monospace; font-size: 12px;">${r.devId}</td>
+            <td>${r.gedung}</td>
+            <td>${r.lokasi}</td>
+            <td>${r.watt} W</td>
+            <td><strong>${r.durationHours.toFixed(1)} Jam</strong></td>
+            <td>${r.kwh.toFixed(2)} kWh</td>
+            <td style="color: #3b82f6; font-weight: 600;">Rp ${Math.round(r.biaya).toLocaleString('id-ID')}</td>
+            <td><span class="${badgeClass}">${r.status}</span></td>
+          </tr>
+        `;
+      }).join('');
+    }
+  }
+
+  if (typeof lucide !== 'undefined') {
+    lucide.createIcons();
+  }
+
+  // Render Charts
+  renderRekapCharts(rekapRows);
+}
+
+function renderRekapCharts(rekapRows) {
+  // Chart 1: Per Gedung (kWh)
+  const gedungMap = {};
+  rekapRows.forEach(r => {
+    const g = r.gedung || 'Lainnya';
+    gedungMap[g] = (gedungMap[g] || 0) + r.kwh;
+  });
+
+  const gedungLabels = Object.keys(gedungMap);
+  const gedungData = Object.values(gedungMap).map(v => parseFloat(v.toFixed(2)));
+
+  const ctxGedung = document.getElementById('chartRekapGedung');
+  if (ctxGedung && typeof Chart !== 'undefined') {
+    if (chartRekapGedung) chartRekapGedung.destroy();
+    chartRekapGedung = new Chart(ctxGedung, {
+      type: 'bar',
+      data: {
+        labels: gedungLabels.length ? gedungLabels : ['Belum ada data'],
+        datasets: [{
+          label: 'Konsumsi (kWh)',
+          data: gedungData.length ? gedungData : [0],
+          backgroundColor: '#3b82f6',
+          borderRadius: 6
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { beginAtZero: true, grid: { color: 'rgba(255, 255, 255, 0.1)' } },
+          x: { grid: { display: false } }
+        }
+      }
+    });
+  }
+
+  // Chart 2: Top 5 AC (Hours)
+  const topAcList = [...rekapRows].sort((a, b) => b.durationHours - a.durationHours).slice(0, 5);
+  const topAcLabels = topAcList.map(r => r.lokasi !== '-' ? r.lokasi : r.noSeri);
+  const topAcData = topAcList.map(r => parseFloat(r.durationHours.toFixed(1)));
+
+  const ctxTop = document.getElementById('chartRekapTopAc');
+  if (ctxTop && typeof Chart !== 'undefined') {
+    if (chartRekapTopAc) chartRekapTopAc.destroy();
+    chartRekapTopAc = new Chart(ctxTop, {
+      type: 'bar',
+      data: {
+        labels: topAcLabels.length ? topAcLabels : ['Belum ada data'],
+        datasets: [{
+          label: 'Total Jam Nyala',
+          data: topAcData.length ? topAcData : [0],
+          backgroundColor: '#10b981',
+          borderRadius: 6
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { beginAtZero: true, grid: { color: 'rgba(255, 255, 255, 0.1)' } },
+          y: { grid: { display: false } }
+        }
+      }
+    });
   }
 }
 

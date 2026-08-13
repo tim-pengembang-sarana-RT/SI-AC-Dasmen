@@ -81,6 +81,9 @@
         <button id="nav-iot" class="nav-btn" onclick="switchTab('iot')">
           <i data-lucide="radio"></i> Log Pemakaian (IoT)
         </button>
+        <button id="nav-rekap" class="nav-btn" onclick="switchTab('rekap')">
+          <i data-lucide="calculator"></i> Rekap Pemakaian AC
+        </button>
       </nav>
       <div class="sidebar-footer">
         <div class="theme-toggle" onclick="toggleTheme()">
@@ -299,6 +302,105 @@
           </div>
         </section>
 
+        <!-- ================= REKAP PEMAKAIAN AC ================= -->
+        <section id="view-rekap" class="view-section hidden">
+          <div class="data-controls glass-panel">
+            <div class="filter-actions" id="filterActionsRekap" style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+              <div class="filter-group">
+                <span style="color: var(--text-secondary); font-weight: 500; font-size: 14px;">Periode:</span>
+                <select id="filterPeriodeRekap" onchange="handlePeriodeRekapChange()">
+                  <option value="bulan_ini">Bulan Ini</option>
+                  <option value="bulan_lalu">Bulan Lalu</option>
+                  <option value="tahun_ini">Tahun Ini</option>
+                  <option value="semua">Semua Waktu</option>
+                  <option value="custom">Custom Tanggal</option>
+                </select>
+              </div>
+              <div class="filter-group" id="groupCustomDateRekap" style="display: flex; gap: 6px; align-items: center;">
+                <input type="date" id="filterTglStartRekap" onchange="renderRekapPemakaian()" title="Tanggal Awal">
+                <span style="color: var(--text-secondary); font-weight: 500; font-size: 14px;">s.d.</span>
+                <input type="date" id="filterTglEndRekap" onchange="renderRekapPemakaian()" title="Tanggal Akhir">
+              </div>
+              <div class="filter-group">
+                <span style="color: var(--text-secondary); font-weight: 500; font-size: 14px;">Gedung:</span>
+                <select id="filterGedungRekap" onchange="renderRekapPemakaian()">
+                  <option value="">Semua Gedung</option>
+                </select>
+              </div>
+              <div class="filter-group" title="Tarif Listrik PLN (Rp per kWh)">
+                <span style="color: var(--text-secondary); font-weight: 500; font-size: 14px;">Tarif PLN (Rp/kWh):</span>
+                <input type="number" id="inputTarifPln" value="1444" min="0" step="50" onchange="renderRekapPemakaian()" style="width: 90px;">
+              </div>
+              <div class="filter-group" title="Daya Rata-Rata per AC jika data di Master kosong (Watt)">
+                <span style="color: var(--text-secondary); font-weight: 500; font-size: 14px;">Def. Daya (Watt):</span>
+                <input type="number" id="inputDefaultWatt" value="900" min="0" step="50" onchange="renderRekapPemakaian()" style="width: 80px;">
+              </div>
+              <button class="btn-secondary" onclick="downloadExcel('rekap')" title="Download Rekap Excel" style="margin-left: auto;"><i data-lucide="download"></i> Export Rekap</button>
+            </div>
+          </div>
+
+          <!-- SUMMARY STAT CARDS -->
+          <div class="stats-grid" style="margin-bottom: 20px;">
+            <div class="stat-card glass-panel gradient-blue">
+              <div class="stat-icon"><i data-lucide="clock"></i></div>
+              <div class="stat-info"><h3>Total Jam Operasional</h3><h2 id="rekap-total-jam">0 Jam</h2></div>
+            </div>
+            <div class="stat-card glass-panel gradient-green">
+              <div class="stat-icon"><i data-lucide="zap"></i></div>
+              <div class="stat-info"><h3>Est. Konsumsi Listrik</h3><h2 id="rekap-total-kwh">0 kWh</h2></div>
+            </div>
+            <div class="stat-card glass-panel gradient-orange">
+              <div class="stat-icon"><i data-lucide="banknote"></i></div>
+              <div class="stat-info"><h3>Estimasi Biaya Listrik</h3><h2 id="rekap-total-biaya">Rp 0</h2></div>
+            </div>
+            <div class="stat-card glass-panel gradient-purple">
+              <div class="stat-icon"><i data-lucide="radio"></i></div>
+              <div class="stat-info"><h3>Unit AC Terdeteksi</h3><h2 id="rekap-total-unit">0 Unit</h2></div>
+            </div>
+          </div>
+
+          <!-- CHARTS SECTION -->
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 20px; margin-bottom: 20px;">
+            <div class="glass-panel" style="padding: 20px;">
+              <h3 style="font-size: 1rem; margin-bottom: 16px; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
+                <i data-lucide="building"></i> Konsumsi Listrik per Gedung (kWh)
+              </h3>
+              <div style="height: 260px; position: relative;">
+                <canvas id="chartRekapGedung"></canvas>
+              </div>
+            </div>
+            <div class="glass-panel" style="padding: 20px;">
+              <h3 style="font-size: 1rem; margin-bottom: 16px; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
+                <i data-lucide="trending-up"></i> Top 5 AC Pemakaian Tertinggi (Jam)
+              </h3>
+              <div style="height: 260px; position: relative;">
+                <canvas id="chartRekapTopAc"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <!-- REKAP TABLE -->
+          <div class="table-container glass-panel">
+            <table>
+              <thead>
+                <tr>
+                  <th>No</th>
+                  <th>No. Seri Indoor</th>
+                  <th>Device ID</th>
+                  <th>Gedung</th>
+                  <th>Lokasi / Ruangan</th>
+                  <th>Daya AC (Watt)</th>
+                  <th>Total Jam Nyala</th>
+                  <th>Est. kWh</th>
+                  <th>Est. Biaya (Rp)</th>
+                  <th>Status Saat Ini</th>
+                </tr>
+              </thead>
+              <tbody id="tableBodyRekap"></tbody>
+            </table>
+          </div>
+        </section>
+
       </div>
     </main>
   </div>
@@ -315,12 +417,16 @@
           <div class="form-group"><label>Merk</label><input type="text" id="inputMerk" list="datalistMerk" required><datalist id="datalistMerk"></datalist></div>
           <div class="form-group">
             <label>Jenis</label>
-            <select id="inputJenis">
-              <option value="">-- Pilih Jenis --</option>
-              <option value="Split">Split</option>
-              <option value="Cassette">Cassette</option>
-              <option value="Standing">Standing</option>
-            </select>
+            <input type="text" id="inputJenis" list="datalistJenis" placeholder="Pilih atau ketik jenis baru..." autocomplete="off">
+            <datalist id="datalistJenis">
+              <option value="Split">
+              <option value="Cassette">
+              <option value="Standing">
+              <option value="Ceiling">
+              <option value="Floor Standing">
+              <option value="Window">
+              <option value="Portable">
+            </datalist>
           </div>
           <div class="form-group"><label>Kode Indoor</label><input type="text" id="inputKodeIndoor"></div>
           <div class="form-group"><label>No. Seri Indoor</label><input type="text" id="inputSeriIndoor"></div>
@@ -510,9 +616,6 @@
   </div>
 
   <script src="data.js"></script>
-  <script src="app.js?v=22"></script>
+  <script src="app.js?v=100011"></script>
 </body>
 </html>
-
-
-

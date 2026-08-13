@@ -817,6 +817,84 @@ tr:hover td:last-child {
   margin-top: 8px;
 }
 
+
+/* --- LOGIN OVERLAY STYLES --- */
+.login-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: linear-gradient(135deg, rgba(26, 26, 46, 0.95), rgba(22, 33, 62, 0.95));
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 10000;
+  backdrop-filter: blur(10px);
+  transition: opacity 0.4s ease;
+}
+
+.login-overlay.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 400px;
+  padding: 40px;
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+
+.login-header {
+  text-align: center;
+}
+
+.login-logo {
+  width: 48px;
+  height: 48px;
+  color: var(--primary-color);
+  margin-bottom: 16px;
+}
+
+.login-header h2 {
+  font-size: 24px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  color: var(--text-primary);
+}
+
+.login-header p {
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.login-error {
+  color: var(--danger-color);
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.login-error.hidden {
+  display: none;
+}
+
+.btn-login {
+  width: 100%;
+  justify-content: center;
+  height: 44px;
+  margin-top: 8px;
+}
+
 .fetching-msg {
   text-align: center;
   font-size: 12px;
@@ -826,4 +904,26 @@ tr:hover td:last-child {
   align-items: center;
   justify-content: center;
   gap: 8px;
+}
+
+/* Rekap Filter Controls */
+#filterActionsRekap select,
+#filterActionsRekap input[type="number"] {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--glass-border);
+  background: var(--bg-color-secondary);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: inherit;
+}
+
+#filterActionsRekap select option {
+  background: #1e293b;
+  color: #f8fafc;
+}
+
+body.light-theme #filterActionsRekap select option {
+  background: #ffffff;
+  color: #0f172a;
 }
