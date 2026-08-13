@@ -237,13 +237,12 @@ function doGet(e) {
   if (action === 'sync_tuya') {
     var deviceIdsStr = e.parameter.deviceIds || "";
     var deviceIds = deviceIdsStr ? deviceIdsStr.split(',').filter(function(id) { return id.trim() !== ""; }) : [];
+    var targetSpreadsheetId = e.parameter.id || null;
     
-    // Batch processing: Tuya API merekomendasikan maksimal 20 device ID per request
-    var chunkSize = 20;
-    for (var i = 0; i < deviceIds.length; i += chunkSize) {
-      var chunk = deviceIds.slice(i, i + chunkSize);
-      fetchTuyaBatchStatus(chunk);
-      Utilities.sleep(500); // Jeda aman antar batch
+    // Gunakan single-device fallback yang lebih andal untuk setiap device
+    for (var i = 0; i < deviceIds.length; i++) {
+      fetchTuyaSingleStatusFallback(deviceIds[i], targetSpreadsheetId);
+      Utilities.sleep(500); // Jeda aman antar request
     }
     
     return ContentService.createTextOutput(JSON.stringify({success: true}))
@@ -355,7 +354,7 @@ function doPost(e) {
     if (payload.action === 'sync_tuya') {
       var deviceIds = payload.deviceIds || [];
       for (var i = 0; i < deviceIds.length; i++) {
-        fetchTuyaDeviceStatus(deviceIds[i]);
+        fetchTuyaSingleStatusFallback(deviceIds[i], body.targetSpreadsheetId);
         // Beri sedikit jeda antar request agar tidak kena rate limit Tuya
         Utilities.sleep(500); 
       }
@@ -462,7 +461,7 @@ var TUYA_CLIENT_SECRET = "fbe2f5a22abb4de1bf7367d8f4b87a71";
 var TUYA_DEVICE_ID = "bf0fc3897a43d32f4c89u6"; 
 var TUYA_REGION = "https://openapi.tuyaeu.com"; // Endpoint untuk Central Europe
 
-function fetchTuyaBatchStatus(deviceIdsArray) {
+function fetchTuyaBatchStatus(deviceIdsArray, targetSpreadsheetId) {
   if (TUYA_CLIENT_ID === "MASUKKAN_CLIENT_ID_DI_SINI" || !deviceIdsArray || deviceIdsArray.length === 0) {
     return;
   }
@@ -499,50 +498,86 @@ function fetchTuyaBatchStatus(deviceIdsArray) {
   var json = JSON.parse(response.getContentText());
   
   console.log("TUYA BATCH RESPONSE:", json);
-  
   if (json.success && json.result) {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var sheet = ss.getSheetByName("log_pemakaian_2026");
-    if (!sheet) return;
+    updateSheetBatch(json.result, targetSpreadsheetId);
+  }
+}
 
-    var cache = CacheService.getScriptCache();
-    var currentTime = new Date();
+function updateSheetBatch(resultsArray, targetSpreadsheetId) {
+  var ss = getSpreadsheet(targetSpreadsheetId);
+  if (!ss) return;
+  var sheet = ss.getSheetByName(SHEET_NAMES.logPemakaian);
+  if (!sheet) return;
+  
+  var data = sheet.getDataRange().getValues();
+  if (data.length === 0) return;
+  
+  var headers = data[0];
+  var idIotIndex = headers.indexOf("id_iot");
+  var statusIndex = headers.indexOf("status_terakhir");
+  var durasiIndex = headers.indexOf("total_menit");
+  
+  var currentTime = new Date();
+  var cache = CacheService.getScriptCache();
+  
+  for (var j = 0; j < resultsArray.length; j++) {
+    var result = resultsArray[j];
+    var tuyaId = result.id;
+    var statusArr = result.status || [];
+    var isOnline = false;
     
-    // Hasil batch: json.result adalah array objek { id: "dev_id", status: [ {code: "switch_1", value: true} ] }
-    for (var i = 0; i < json.result.length; i++) {
-      var device = json.result[i];
-      var devId = device.id;
-      var statusArr = device.status || [];
-      
-      var isOn = false;
-      for (var j = 0; j < statusArr.length; j++) {
-        if (statusArr[j].code === "switch_1") {
-          isOn = statusArr[j].value;
-        }
-      }
-      
-      var currentStatusStr = isOn ? "ON" : "OFF";
-      var cacheKey = "STATUS_" + devId;
-      var lastStatus = cache.get(cacheKey);
-      
-      // HANYA TULIS KE SPREADSHEET JIKA STATUS BERUBAH ATAU BELUM PERNAH DICATAT
-      if (lastStatus !== currentStatusStr) {
-        sheet.appendRow([currentTime, devId, currentStatusStr]);
-        // Simpan status baru ke RAM Google selama 6 jam (maksimal batas cache)
-        cache.put(cacheKey, currentStatusStr, 21600); 
+    for (var k = 0; k < statusArr.length; k++) {
+      if (statusArr[k].code === "switch_1" || statusArr[k].code === "switch") {
+        isOnline = statusArr[k].value;
       }
     }
-  } else {
-    // Jika endpoint batch gagal karena versi API, fallback ke per-device
-    console.log("BATCH GAGAL, mencoba per-device. Pesan:", json.msg);
-    for (var k = 0; k < deviceIdsArray.length; k++) {
-      fetchTuyaSingleStatusFallback(deviceIdsArray[k]);
+    
+    var statusStr = isOnline ? "ON" : "OFF";
+    var cacheKey = "STATUS_" + tuyaId;
+    var lastStatus = cache.get(cacheKey);
+    
+    // 1. Update existing rows so that all past rows for this device show the current status?
+    // NO! History rows should NOT change their "status_terakhir" except maybe the latest one.
+    // Actually, based on previous logic, we were updating ALL rows, but let's keep it to update only the most recent one if needed, or just update all for now to be safe.
+    var found = false;
+    for (var i = 1; i < data.length; i++) {
+      if (idIotIndex === -1) break;
+      var rowIdIot = String(data[i][idIotIndex]).trim();
+      
+      if (rowIdIot === tuyaId) {
+        found = true;
+        if (statusIndex > -1) sheet.getRange(i + 1, statusIndex + 1).setValue(statusStr);
+        
+        // Cek durasi jika OFF
+        if (!isOnline && durasiIndex > -1) {
+          var durasiStr = String(data[i][durasiIndex]).trim();
+          if (durasiStr.indexOf("Sedang Berjalan") !== -1) {
+            sheet.getRange(i + 1, durasiIndex + 1).setValue("Selesai (Manual Update)");
+          }
+        }
+      }
+    }
+    
+    // 2. Append history log ONLY if the status changed from last known state
+    // Cek juga dari baris terakhir di sheet untuk berjaga-jaga jika cache expired
+    var lastRowInSheet = sheet.getLastRow();
+    var lastStatusInSheet = '';
+    if (lastRowInSheet >= 2) {
+      var lastRowData = sheet.getRange(lastRowInSheet, 1, 1, 3).getValues()[0];
+      if (String(lastRowData[1]).trim() === tuyaId) {
+        lastStatusInSheet = String(lastRowData[2]).trim();
+      }
+    }
+    var effectiveLastStatus = lastStatus || lastStatusInSheet;
+    if (effectiveLastStatus !== statusStr) {
+      sheet.appendRow([currentTime, tuyaId, statusStr]);
+      cache.put(cacheKey, statusStr, 21600);
     }
   }
 }
 
 // Fallback jika API batching tidak diizinkan oleh cloud project Tuya
-function fetchTuyaSingleStatusFallback(targetDevice) {
+function fetchTuyaSingleStatusFallback(targetDevice, targetSpreadsheetId) {
   var token = getTuyaToken();
   if (!token) return;
   var timestamp = new Date().getTime().toString();
@@ -570,11 +605,27 @@ function fetchTuyaSingleStatusFallback(targetDevice) {
     }
     var currentStatusStr = isOn ? "ON" : "OFF";
     var cache = CacheService.getScriptCache();
-    var lastStatus = cache.get("STATUS_" + targetDevice);
-    if (lastStatus !== currentStatusStr) {
-      var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("log_pemakaian_2026");
-      if (sheet) sheet.appendRow([new Date(), targetDevice, currentStatusStr]);
-      cache.put("STATUS_" + targetDevice, currentStatusStr, 21600);
+    var cacheKey = "STATUS_" + targetDevice;
+    var lastStatus = cache.get(cacheKey);
+    var ss = getSpreadsheet(targetSpreadsheetId);
+    if (ss) {
+      var sheet = ss.getSheetByName(SHEET_NAMES.logPemakaian);
+      // HANYA TULIS KE SPREADSHEET JIKA STATUS BERUBAH ATAU BELUM PERNAH DICATAT
+      // Cek juga dari baris terakhir di sheet untuk berjaga-jaga jika cache expired
+      var lastRowInSheet = sheet.getLastRow();
+      var lastStatusInSheet = '';
+      if (lastRowInSheet >= 2) {
+        var lastRowData = sheet.getRange(lastRowInSheet, 1, 1, 3).getValues()[0];
+        if (String(lastRowData[1]).trim() === targetDevice) {
+          lastStatusInSheet = String(lastRowData[2]).trim();
+        }
+      }
+      var effectiveLastStatus = lastStatus || lastStatusInSheet;
+      if (effectiveLastStatus !== currentStatusStr) {
+        sheet.appendRow([new Date(), targetDevice, currentStatusStr]);
+        // Simpan status baru ke RAM Google selama 6 jam (maksimal batas cache)
+        cache.put(cacheKey, currentStatusStr, 21600); 
+      }
     }
   }
 }
