@@ -1154,9 +1154,11 @@ function renderLogTable(type) {
     filteredLogPemakaian = uniqueDataToRender;
 
     uniqueDataToRender.forEach(item => {
-      const waktuText = item.tanggal ? new Date(item.tanggal).toLocaleString('id-ID') : '-';
-      const deviceIdText = item.id_iot || '-';
-      const statusText = item.status_terakhir || '-';
+      const vals = Object.values(item);
+      const rawWaktu = vals[0] || '';
+      const waktuText = rawWaktu ? new Date(rawWaktu).toLocaleString('id-ID') : '-';
+      const deviceIdText = vals[1] || '-';
+      const statusText = vals[2] || '-';
       
       const acInfo = acData.find(x => x['Device ID (IoT)'] === deviceIdText || x['Device ID IoT'] === deviceIdText || x['id_iot'] === deviceIdText || (x.Keterangan && x.Keterangan.includes(deviceIdText)));
       const noSeriText = acInfo ? (acInfo['No. Seri Indoor'] || '-') : '-';
@@ -1838,7 +1840,7 @@ async function refreshIoT() {
     // 1. Minta backend untuk sinkronisasi dengan server Tuya
     // 1. Perintahkan backend untuk sinkronisasi dengan Tuya
     let deviceIdsFromAc = acData.map(item => item['Device ID (IoT)'] || item['Device ID IoT'] || item.id_iot);
-    let deviceIdsFromLog = logPemakaian.map(item => item.id_iot);
+    let deviceIdsFromLog = logPemakaian.map(item => Object.values(item)[1]);
     let allDeviceIds = deviceIdsFromAc.concat(deviceIdsFromLog);
     
     const deviceIds = [...new Set(allDeviceIds.filter(id => id && id !== '-' && String(id).trim() !== ''))];
@@ -1861,22 +1863,30 @@ async function refreshIoT() {
     
     // 2. Tarik log terbaru dari Google Sheets
     const response = await fetch(`${WEB_APP_URL}?id=${targetId}`);
-    if (!response.ok) throw new Error('Network response was not ok');
+    if (!response.ok) throw new Error('Network response was not ok: ' + response.statusText);
     const dbData = await response.json();
+    if (dbData.error) throw new Error(dbData.error);
     
-    if (!dbData.error) {
+    if (dbData) {
       logPemakaian = dbData.logPemakaian || [];
       renderLogTable('iot');
+      if (typeof renderStatsPemakaian === 'function') renderStatsPemakaian();
     }
-  } catch(e) {
-    console.error(e);
-    alert("Gagal memuat ulang data IoT. Error: " + e.message);
-  } finally {
+    
     if (btn) {
       btn.innerHTML = `<i data-lucide="refresh-cw"></i> Refresh Manual`;
-      btn.disabled = false;
       lucide.createIcons();
     }
+  } catch (error) {
+    console.error('Error refreshing IoT:', error);
+    alert('Gagal menyinkronkan data IoT: ' + error.message);
+    if (btn) {
+      btn.innerHTML = `<i data-lucide="refresh-cw"></i> Refresh Manual`;
+      lucide.createIcons();
+    }
+  } finally {
+    if (icon) icon.classList.remove('spin');
+    if (btn) btn.disabled = false;
   }
 }
 
