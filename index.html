@@ -222,6 +222,23 @@
               <button class="btn-primary no-drag" data-id="pm-tambah" onclick="openModalLog('pemeliharaan')"><i data-lucide="plus"></i> Tambah Log</button>
             </div>
           </div>
+
+          <!-- BADGE RINGKASAN FREKUENSI TINDAKAN (OPSI 2) -->
+          <div id="infoFrekuensiPemeliharaan" class="glass-panel" style="display: none; margin-bottom: 20px; padding: 12px 20px; align-items: center; justify-content: space-between; background: rgba(59, 130, 246, 0.09); border: 1px solid rgba(59, 130, 246, 0.25); border-radius: 12px; gap: 16px;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="background: var(--primary-color); color: white; width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                <i data-lucide="wrench" style="width: 18px; height: 18px;"></i>
+              </div>
+              <div>
+                <div id="infoFrekuensiSub" style="font-size: 0.78rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">Frekuensi Tindakan</div>
+                <div id="infoFrekuensiText" style="font-size: 0.95rem; font-weight: 500; color: var(--text-primary); margin-top: 2px;"></div>
+              </div>
+            </div>
+            <div id="infoFrekuensiBadge" style="background: var(--primary-color); color: white; padding: 6px 16px; border-radius: 20px; font-weight: 700; font-size: 0.95rem; white-space: nowrap; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);">
+              0 Kali
+            </div>
+          </div>
+
           <div class="table-container glass-panel">
             <table>
               <thead><tr><th>Tgl Laporan</th><th>Pelapor</th><th>No Seri</th><th>Lokasi</th><th>Keluhan</th><th>Tgl Servis</th><th>Vendor/Teknisi</th><th>Jenis Tindakan</th><th>Tindakan Perbaikan</th><th>Tgl Selesai</th><th>Status</th><th>Keterangan</th><th>Aksi</th></tr></thead>
@@ -616,6 +633,6 @@
   </div>
 
   <script src="data.js"></script>
-  <script src="app.js?v=100011"></script>
+  <script src="app.js?v=100015"></script>
 </body>
 </html>

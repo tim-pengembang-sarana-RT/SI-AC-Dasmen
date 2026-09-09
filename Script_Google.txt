@@ -73,7 +73,7 @@ function onEdit(e) {
         var dataMasterM = masterSheet.getRange(2, 1, lastRowMasterM - 1, 15).getDisplayValues(); 
         var gedungDitemukan = "Tidak Ditemukan", lokasiDitemukan = "Tidak Ditemukan";
         for (var i = 0; i < dataMasterM.length; i++) {
-          if (dataMasterM[i][4].trim() === noSeriMutasi) { 
+          if (dataMasterM[i][4].trim().toLowerCase() === noSeriMutasi.toLowerCase()) { 
             gedungDitemukan = dataMasterM[i][13].trim(); lokasiDitemukan = dataMasterM[i][14].trim(); break;
           }
         }
@@ -123,7 +123,7 @@ function onEdit(e) {
           var barisTarget = -1;
           
           for (var j = 0; j < dataNoSeriMasterM.length; j++) {
-            if (dataNoSeriMasterM[j][0].trim() === noSeriMutasiUbah) {
+            if (dataNoSeriMasterM[j][0].trim().toLowerCase() === noSeriMutasiUbah.toLowerCase()) {
               barisTarget = j + 2;
               break;
             }
@@ -183,7 +183,7 @@ function onEdit(e) {
         
         var ditemukanH = false;
         for (var k = 0; k < dataNoSeriMasterH.length; k++) {
-          if (dataNoSeriMasterH[k][0].trim() === noSeriHapus) {
+          if (dataNoSeriMasterH[k][0].trim().toLowerCase() === noSeriHapus.toLowerCase()) {
             // Ubah Lokasi di Master (Kolom O/ke-15) menjadi Lokasi Gudang
             masterSheetH.getRange(k + 2, 15).setValue(lokasiGudang); 
             // Ubah Kondisi di Master (Kolom M/ke-13) menjadi Kondisi Terakhir

@@ -90,6 +90,13 @@ function normalizeSeri(arr, fields) {
   });
 }
 
+// Helper pembanding nomor seri yang kebal perbedaan huruf besar/kecil (Case-Insensitive)
+function isSameSeri(seriA, seriB) {
+  if (seriA === undefined || seriA === null || seriB === undefined || seriB === null) return false;
+  return String(seriA).trim().toLowerCase() === String(seriB).trim().toLowerCase();
+}
+
+
 async function saveToDatabase() {
   const payload = { acData, logPemeliharaan, logMutasi, logUsulHapus };
   const targetId = getTargetSpreadsheetId();
@@ -213,7 +220,7 @@ async function initState() {
     let needsSave = false;
     logUsulHapus.forEach(log => {
       if (!log.no_seri_indoor) return;
-      const idx = acData.findIndex(x => x['No. Seri Indoor'] == log.no_seri_indoor);
+      const idx = acData.findIndex(x => isSameSeri(x['No. Seri Indoor'], log.no_seri_indoor));
       if (idx > -1) {
         let changed = false;
         if (acData[idx].Gedung !== 'Gudang') {
@@ -866,7 +873,7 @@ function saveData(event) {
       acData[index] = newData;
     }
   } else {
-    if (seriIndoor && acData.some(item => item['No. Seri Indoor'] == seriIndoor)) {
+    if (seriIndoor && acData.some(item => isSameSeri(item['No. Seri Indoor'], seriIndoor))) {
       alert("Error: No. Seri Indoor sudah terdaftar di database!");
       return;
     }
@@ -979,7 +986,7 @@ function renderLogTable(type) {
         }
       }
 
-      const matchSeri = !filterSeri || item.no_seri_indoor === filterSeri;
+      const matchSeri = !filterSeri || isSameSeri(item.no_seri_indoor, filterSeri);
       const matchTindakan = !filterTindakan || item.jenis_tindakan === filterTindakan;
       const matchStatus = !filterStatus || item.status_akhir === filterStatus;
       
@@ -991,13 +998,13 @@ function renderLogTable(type) {
     // --- Smart Cascading Dropdowns ---
     // Hitung ulang opsi Tindakan dan Status berdasarkan filter lain (kecuali filter diri sendiri)
     const dataForTindakan = logPemeliharaan.filter(item => {
-      const matchSeri = !filterSeri || item.no_seri_indoor === filterSeri;
+      const matchSeri = !filterSeri || isSameSeri(item.no_seri_indoor, filterSeri);
       const matchStatus = !filterStatus || item.status_akhir === filterStatus;
       return matchSeri && matchStatus; // Sederhananya, abaikan tindakan saat filter tindakan
     });
     
     const dataForStatus = logPemeliharaan.filter(item => {
-      const matchSeri = !filterSeri || item.no_seri_indoor === filterSeri;
+      const matchSeri = !filterSeri || isSameSeri(item.no_seri_indoor, filterSeri);
       const matchTindakan = !filterTindakan || item.jenis_tindakan === filterTindakan;
       return matchSeri && matchTindakan; // Sederhananya, abaikan status saat filter status
     });
@@ -1018,8 +1025,83 @@ function renderLogTable(type) {
     }
     // --- End Smart Cascading ---
 
+    // --- UPDATE BADGE FREKUENSI TINDAKAN (LUGAS & TEPAT SASARAN) ---
+    const infoBox = document.getElementById('infoFrekuensiPemeliharaan');
+    const infoText = document.getElementById('infoFrekuensiText');
+    const infoSub = document.getElementById('infoFrekuensiSub');
+    const infoBadge = document.getElementById('infoFrekuensiBadge');
+
+    if (infoBox && infoText && infoBadge) {
+      if (filterTindakan) {
+        const totalFiltered = dataToRender.length;
+        const isFilteredSubset = !!(filterQ || filterSeri || filterStatus || filterTglStart || filterTglEnd);
+
+        // Ambil sebaran lokasi dan unit AC unik dari data yang sedang tampil di layar
+        const lokasiSet = new Set();
+        const unitSet = new Set();
+
+        dataToRender.forEach(item => {
+          if (item.no_seri_indoor) unitSet.add(item.no_seri_indoor);
+          const ac = acData.find(x => isSameSeri(x['No. Seri Indoor'], item.no_seri_indoor));
+          if (ac && (ac.Gedung || ac.Lokasi)) {
+            const l = [ac.Gedung, ac.Lokasi].filter(Boolean).join(' / ');
+            if (l) lokasiSet.add(l);
+          } else if (item.lokasi_otomatis && item.lokasi_otomatis !== '-') {
+            lokasiSet.add(item.lokasi_otomatis);
+          }
+        });
+
+        const jumlahLokasi = lokasiSet.size;
+        const jumlahUnit = unitSet.size;
+        const lokasiList = Array.from(lokasiSet);
+        const unitList = Array.from(unitSet);
+
+        let deskripsi = '';
+        let subTitle = '';
+
+        if (totalFiltered === 0) {
+          deskripsi = `Tidak ditemukan riwayat tindakan "<strong>${filterTindakan}</strong>" yang sesuai dengan filter saat ini.`;
+          subTitle = 'HASIL FILTER TINDAKAN (0 DATA)';
+        } else if (isFilteredSubset) {
+          // Sedang dalam pencarian / filter spesifik (misal mencari nomor seri atau tanggal tertentu)
+          if (totalFiltered === 1) {
+            const seriInfo = unitList[0] ? `No. Seri: <strong>${unitList[0]}</strong>` : '';
+            const lokInfo = lokasiList[0] ? `Lokasi: <em>${lokasiList[0]}</em>` : '';
+            const detailInfo = [seriInfo, lokInfo].filter(Boolean).join(' — ');
+            deskripsi = `Ditemukan <strong>1 kali</strong> tindakan "<strong>${filterTindakan}</strong>"${detailInfo ? ' (' + detailInfo + ')' : ''}.`;
+          } else {
+            if (jumlahLokasi === 1 && lokasiList[0]) {
+              deskripsi = `Ditemukan <strong>${totalFiltered} kali</strong> tindakan "<strong>${filterTindakan}</strong>" (seluruhnya di lokasi: <em>${lokasiList[0]}</em>).`;
+            } else if (jumlahLokasi > 1) {
+              deskripsi = `Ditemukan <strong>${totalFiltered} kali</strong> tindakan "<strong>${filterTindakan}</strong>" (tersebar di <strong>${jumlahLokasi} lokasi</strong> / <strong>${jumlahUnit} unit AC</strong>).`;
+            } else {
+              deskripsi = `Ditemukan <strong>${totalFiltered} kali</strong> tindakan "<strong>${filterTindakan}</strong>" sesuai filter saat ini.`;
+            }
+          }
+          subTitle = `HASIL FILTER TINDAKAN (${totalFiltered} DATA)`;
+        } else {
+          // Mode umum (melihat seluruh data untuk jenis tindakan ini)
+          if (jumlahLokasi === 1 && lokasiList[0]) {
+            deskripsi = `Jenis Tindakan "<strong>${filterTindakan}</strong>" tercatat sebanyak <strong>${totalFiltered} kali</strong> (pada lokasi: <em>${lokasiList[0]}</em>).`;
+          } else if (jumlahLokasi > 1) {
+            deskripsi = `Jenis Tindakan "<strong>${filterTindakan}</strong>" tercatat sebanyak <strong>${totalFiltered} kali</strong> (tersebar di <strong>${jumlahLokasi} lokasi</strong> / <strong>${jumlahUnit} unit AC</strong>).`;
+          } else {
+            deskripsi = `Jenis Tindakan "<strong>${filterTindakan}</strong>" tercatat sebanyak <strong>${totalFiltered} kali</strong> pada seluruh unit AC.`;
+          }
+          subTitle = jumlahLokasi > 1 ? `FREKUENSI TINDAKAN (${jumlahLokasi} LOKASI TERDATA)` : `FREKUENSI TINDAKAN (SELURUH AC)`;
+        }
+
+        if (infoSub) infoSub.innerText = subTitle;
+        infoText.innerHTML = deskripsi;
+        infoBadge.innerText = `${totalFiltered} Kali`;
+        infoBox.style.display = 'flex';
+      } else {
+        infoBox.style.display = 'none';
+      }
+    }
+
     dataToRender.forEach(item => {
-      const acInfo = acData.find(x => x['No. Seri Indoor'] == item.no_seri_indoor);
+      const acInfo = acData.find(x => isSameSeri(x['No. Seri Indoor'], item.no_seri_indoor));
       const lokasiText = acInfo ? `${acInfo.Gedung || '-'} / ${acInfo.Lokasi || '-'}` : '-';
       tbody.insertAdjacentHTML('beforeend', `<tr>
         <td>${formatDateUI(item.tanggal_laporan)}</td>
@@ -1426,7 +1508,7 @@ function autoFillPemeliharaan() {
     lokasiAuto.value = '';
     return;
   }
-  const ac = acData.find(x => x['No. Seri Indoor'] == noSeri);
+  const ac = acData.find(x => isSameSeri(x['No. Seri Indoor'], noSeri));
   if (ac) {
     lokasiAuto.value = `${ac.Gedung || '-'} / ${ac.Lokasi || '-'}`;
   } else {
@@ -1446,7 +1528,7 @@ function autoFillMutasi() {
     return; 
   }
 
-  const ac = acData.find(x => x['No. Seri Indoor'] == noSeri);
+  const ac = acData.find(x => isSameSeri(x['No. Seri Indoor'], noSeri));
   if (ac) {
     gedungAsalField.value = ac.Gedung || 'Tidak terdata';
     lokasiAsalField.value = ac.Lokasi || 'Tidak terdata';
@@ -1463,23 +1545,27 @@ function saveLog(event, type) {
     const editId = document.getElementById('editIdPemeliharaan').value;
     const noSeri = document.getElementById('p_seri').value.trim();
     
-    // Validasi Relasi Primary Key
-    if (noSeri && !acData.some(x => x['No. Seri Indoor'] == noSeri)) {
+    const matchedAc = acData.find(x => isSameSeri(x['No. Seri Indoor'], noSeri));
+
+    // Validasi Relasi Primary Key (Case-Insensitive)
+    if (noSeri && !matchedAc) {
       alert(`⛔ GAGAL DISIMPAN: Nomor Seri Indoor "${noSeri}" tidak terdaftar di Data AC Utama.\n\nSilakan cek kembali penulisan Anda atau daftarkan AC tersebut di Master Data terlebih dahulu.`);
       return; // Blokir penyimpanan
     }
 
     // PENGAMAN: Cegah Pemeliharaan jika sudah ada di Usul Hapus
-    if (noSeri && logUsulHapus.some(x => x.no_seri_indoor == noSeri)) {
+    if (noSeri && logUsulHapus.some(x => isSameSeri(x.no_seri_indoor, noSeri))) {
       alert(`⛔ GAGAL DISIMPAN: Nomor Seri "${noSeri}" sudah berada di daftar Usul Hapus (Gudang).\n\nAC yang sudah diusulkan hapus tidak dapat dipelihara/diservis lagi.`);
       return;
     }
+
+    const canonicalSeri = matchedAc ? (matchedAc['No. Seri Indoor'] || noSeri) : noSeri;
 
     const newData = {
       id_laporan: editId || Date.now().toString(),
       tanggal_laporan: document.getElementById('p_tglLaporan').value,
       nama_pelapor: document.getElementById('p_pelapor').value,
-      no_seri_indoor: noSeri,
+      no_seri_indoor: canonicalSeri,
       keluhan_awal: document.getElementById('p_keluhan').value,
       tanggal_servis_cek: document.getElementById('p_tglServis').value,
       nama_vendor_teknisi: document.getElementById('p_vendor').value,
@@ -1500,17 +1586,21 @@ function saveLog(event, type) {
     const editId = document.getElementById('editIdMutasi').value;
     const noSeri = document.getElementById('m_seri').value.trim();
     
-    // Validasi Relasi Primary Key
-    if (noSeri && !acData.some(x => x['No. Seri Indoor'] == noSeri)) {
+    const matchedAc = acData.find(x => isSameSeri(x['No. Seri Indoor'], noSeri));
+
+    // Validasi Relasi Primary Key (Case-Insensitive)
+    if (noSeri && !matchedAc) {
       alert(`⛔ GAGAL DISIMPAN: Nomor Seri Indoor "${noSeri}" tidak terdaftar di Data AC Utama.\n\nSilakan cek kembali penulisan Anda atau daftarkan AC tersebut di Master Data terlebih dahulu.`);
       return;
     }
 
     // PENGAMAN: Cegah Mutasi jika sudah ada di Usul Hapus
-    if (noSeri && logUsulHapus.some(x => x.no_seri_indoor == noSeri)) {
+    if (noSeri && logUsulHapus.some(x => isSameSeri(x.no_seri_indoor, noSeri))) {
       alert(`⛔ GAGAL DISIMPAN: Nomor Seri "${noSeri}" sudah berada di daftar Usul Hapus (Gudang).\n\nAC yang sudah diusulkan hapus tidak dapat dimutasikan lagi.`);
       return;
     }
+
+    const canonicalSeri = matchedAc ? (matchedAc['No. Seri Indoor'] || noSeri) : noSeri;
 
     const gedungBaru = document.getElementById('m_gedung_tujuan').value;
     const lokasiBaru = document.getElementById('m_lokasi_tujuan').value;
@@ -1519,7 +1609,7 @@ function saveLog(event, type) {
 
     // ROBOT 2: Jalankan sinkronisasi secara otomatis
     if (isSync) {
-      const idx = acData.findIndex(x => x['No. Seri Indoor'] == noSeri);
+      const idx = acData.findIndex(x => isSameSeri(x['No. Seri Indoor'], noSeri));
       if (idx > -1) {
         acData[idx].Gedung = gedungBaru;
         acData[idx].Lokasi = lokasiBaru;
@@ -1533,7 +1623,7 @@ function saveLog(event, type) {
     const newData = {
       id_mutasi: editId || Date.now().toString(),
       tanggal_mutasi: document.getElementById('m_tglMutasi').value,
-      no_seri_indoor: noSeri,
+      no_seri_indoor: canonicalSeri,
       gedung_asal: document.getElementById('m_gedung_asal').value,
       lokasi_asal: document.getElementById('m_lokasi_asal').value,
       gedung_tujuan: gedungBaru,
@@ -1553,11 +1643,15 @@ function saveLog(event, type) {
     const editId = document.getElementById('editIdUsulHapus').value;
     const noSeri = document.getElementById('h_seri').value.trim();
     
-    // Validasi Relasi Primary Key
-    if (noSeri && !acData.some(x => x['No. Seri Indoor'] == noSeri)) {
+    const matchedAc = acData.find(x => isSameSeri(x['No. Seri Indoor'], noSeri));
+
+    // Validasi Relasi Primary Key (Case-Insensitive)
+    if (noSeri && !matchedAc) {
       alert(`⛔ GAGAL DISIMPAN: Nomor Seri Indoor "${noSeri}" tidak terdaftar di Data AC Utama.\n\nSilakan cek kembali penulisan Anda atau daftarkan AC tersebut di Master Data terlebih dahulu.`);
       return;
     }
+
+    const canonicalSeri = matchedAc ? (matchedAc['No. Seri Indoor'] || noSeri) : noSeri;
 
     const kondisi = document.getElementById('h_kondisi').value;
     const gudang = document.getElementById('h_gudang').value;
@@ -1566,7 +1660,7 @@ function saveLog(event, type) {
 
     // ROBOT 3: Jalankan sinkronisasi secara otomatis
     if (isSync) {
-      const idx = acData.findIndex(x => x['No. Seri Indoor'] == noSeri);
+      const idx = acData.findIndex(x => isSameSeri(x['No. Seri Indoor'], noSeri));
       if (idx > -1) {
         acData[idx].Gedung = 'Gudang';
         acData[idx].Lokasi = gudang;
@@ -1586,7 +1680,7 @@ function saveLog(event, type) {
       tanggal_usulan: document.getElementById('h_tglUsulan').value,
       tanggal_masuk_gudang: document.getElementById('h_tglMasukGudang').value,
       no_nota_dinas: document.getElementById('h_nota').value,
-      no_seri_indoor: noSeri,
+      no_seri_indoor: canonicalSeri,
       kondisi_terakhir: kondisi,
       Lokasi_Gudang: gudang,
       status_sistem: statusHapus
@@ -1635,7 +1729,7 @@ function downloadExcel(type) {
     filename = 'Data_AC_Utama.xlsx';
   } else if (type === 'pemeliharaan') {
     dataToExport = filteredLogPemeliharaan.map(item => {
-      const acInfo = acData.find(x => x['No. Seri Indoor'] == item.no_seri_indoor);
+      const acInfo = acData.find(x => isSameSeri(x['No. Seri Indoor'], item.no_seri_indoor));
       const lokasiText = acInfo ? `${acInfo.Gedung || '-'} / ${acInfo.Lokasi || '-'}` : '-';
       return {
         "TGL LAPORAN": formatDateUI(item.tanggal_laporan),
@@ -1796,15 +1890,15 @@ function validateSeriRealtime(inputId, statusId) {
     return;
   }
   
-  // Cek apakah nomor seri ada di Master Data (acData)
-  const exists = acData.some(x => x['No. Seri Indoor'] == val);
+  // Cek apakah nomor seri ada di Master Data (acData) secara case-insensitive
+  const exists = acData.some(x => isSameSeri(x['No. Seri Indoor'], val));
   
   let isValid = exists;
   let errorMsg = '';
   
   // Pengaman: Jika form mutasi atau pemeliharaan, pastikan AC tidak di Usul Hapus
   if (exists && (inputId === 'm_seri' || inputId === 'p_seri')) {
-    const isUsulHapus = logUsulHapus.some(x => x.no_seri_indoor == val);
+    const isUsulHapus = logUsulHapus.some(x => isSameSeri(x.no_seri_indoor, val));
     if (isUsulHapus) {
       isValid = false;
       errorMsg = 'Sudah Usul Hapus';
