@@ -274,10 +274,25 @@ function checkAlarmUsulHapus() {
   let jatuhTempo = 0;
   let daftarSeri = [];
   const hariIni = new Date();
+  let needSave = false;
 
   logUsulHapus.forEach(item => {
     const status = String(item.status_sistem || '');
     if (status === "✅ MASUK GUDANG" || status.includes("MASUK GUDANG")) {
+      const seri = item.no_seri_indoor;
+
+      // CEK OTOMATIS: Apakah nomor seri ini masih ada di Data AC Utama (acData)?
+      const masihAdaDiMaster = acData.some(x => isSameSeri(x['No. Seri Indoor'], seri));
+
+      if (!masihAdaDiMaster) {
+        // Jika sudah tidak ada di Data AC Utama, otomatis ubah status log jadi SUDAH DIHAPUS PERMANEN
+        // sehingga riwayat tetap tersimpan rapi sebagai arsip dan alarm tidak berbunyi.
+        item.status_sistem = "✅ SUDAH DIHAPUS PERMANEN";
+        needSave = true;
+        return; // Jangan masukkan ke daftar alarm
+      }
+
+      // Jika MASIH ADA di Data AC Utama, baru kita hitung apakah usulannya sudah >= 90 hari (3 bulan)
       let dateStr = String(item.tanggal_usulan || '');
       if (dateStr && dateStr.includes("/")) {
         let parts = dateStr.split("/");
@@ -296,11 +311,16 @@ function checkAlarmUsulHapus() {
     }
   });
 
+  if (needSave) {
+    saveToDatabase();
+    renderLogTable('usul-hapus');
+  }
+
   if (jatuhTempo > 0) {
     alert("🚨 PERINGATAN PENGHAPUSAN ASET BMN 🚨\n\n" +
           "Terdapat " + jatuhTempo + " unit AC yang usulan penghapusannya sudah melewati batas waktu 3 bulan namun belum dihapus permanen dari tab Master.\n\n" +
           "Nomor Seri: " + daftarSeri.join(", ") + "\n\n" +
-          "Silakan lakukan penghapusan manual di tab Data AC Utama, lalu ubah statusnya menjadi '✅ SUDAH DIHAPUS PERMANEN' di log usul hapus.");
+          "Silakan lakukan penghapusan manual di tab Data AC Utama.");
   }
 }
 
@@ -918,6 +938,21 @@ function editData(id) {
 
 function deleteData(id) {
   if (confirm('Apakah Anda yakin ingin menghapus data ini?')) {
+    const itemToDelete = acData.find(item => item.No == id);
+    if (itemToDelete) {
+      const seri = itemToDelete['No. Seri Indoor'];
+      // Jika nomor seri ini ada di log usul hapus, otomatis update statusnya menjadi SUDAH DIHAPUS PERMANEN
+      let updatedUH = false;
+      logUsulHapus.forEach(uh => {
+        if (isSameSeri(uh.no_seri_indoor, seri) && String(uh.status_sistem || '').includes("MASUK GUDANG")) {
+          uh.status_sistem = '✅ SUDAH DIHAPUS PERMANEN';
+          updatedUH = true;
+        }
+      });
+      if (updatedUH) {
+        renderLogTable('usul-hapus');
+      }
+    }
     acData = acData.filter(item => item.No != id);
     saveToDatabase();
     filterData();
